@@ -107,10 +107,17 @@ describe('program actions', () => {
     const slots = await db.scheduleSlot.where('programId').equals(program.id).sortBy('orderIndex');
     // Build a fresh 2-member superset to avoid relying on whichever seed slot
     // happens to have one.
-    const slot = slots.find(async (s) => {
+    let slot: ScheduleSlot | undefined;
+    for (const s of slots) {
       const plans = await db.slotPlan.where('scheduleSlotId').equals(s.id).toArray();
-      return plans.length >= 2;
-    })!;
+      if (plans.length >= 2) {
+        slot = s;
+        break;
+      }
+    }
+    if (!slot) {
+      throw new Error('Expected at least one slot with >=2 plans');
+    }
     const plans = await db.slotPlan.where('scheduleSlotId').equals(slot.id).sortBy('orderIndex');
     const a = plans[0]!;
     const b = plans[1]!;
