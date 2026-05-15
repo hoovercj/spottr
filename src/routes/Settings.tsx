@@ -24,6 +24,11 @@ import {
 } from '@/features/export/destination';
 import { ExportStatusLine } from '@/features/export/ExportStatusLine';
 import { parseExportPayload, restoreFromPayload } from '@/features/export/restore';
+import {
+  connectGoogleDrive,
+  disconnectGoogleDrive,
+  isGoogleDriveAvailable,
+} from '@/features/export/googleDrive';
 import { wipeAllData } from '@/data/reset';
 import { seedFakeHistory } from '@/data/fakeHistory';
 
@@ -60,6 +65,31 @@ export function Settings() {
       await chooseDownloadFallback();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not change destination');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const driveAvailable = isGoogleDriveAvailable();
+  const switchToGoogleDrive = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await connectGoogleDrive();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not connect Google Drive');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disconnectDrive = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await disconnectGoogleDrive();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not disconnect');
     } finally {
       setBusy(false);
     }
@@ -191,7 +221,7 @@ export function Settings() {
           <Divider sx={{ my: 1 }} />
 
           <Typography variant="body2" color="text.secondary">
-            Current destination: {status?.destinationKind ?? 'unknown'}
+            Current destination: {destinationDisplayName(status?.destinationKind)}
           </Typography>
           <Button
             onClick={() => void switchToFolder()}
@@ -203,6 +233,22 @@ export function Settings() {
           <Button onClick={() => void switchToDownload()} disabled={busy} variant="text">
             Use downloads folder
           </Button>
+          {driveAvailable && (
+            <Button
+              onClick={() => void switchToGoogleDrive()}
+              disabled={busy}
+              variant={status?.destinationKind === 'google-drive' ? 'text' : 'text'}
+            >
+              {status?.destinationKind === 'google-drive'
+                ? 'Reconnect Google Drive'
+                : 'Connect Google Drive'}
+            </Button>
+          )}
+          {driveAvailable && status?.destinationKind === 'google-drive' && (
+            <Button onClick={() => void disconnectDrive()} disabled={busy} variant="text">
+              Disconnect Google Drive
+            </Button>
+          )}
 
           <Divider sx={{ my: 1 }} />
 
@@ -294,4 +340,22 @@ export function Settings() {
       </Dialog>
     </Box>
   );
+}
+
+function destinationDisplayName(
+  kind: 'local-directory' | 'download' | 'google-drive' | 'memory' | null | undefined,
+): string {
+  switch (kind) {
+    case 'local-directory':
+      return 'local folder';
+    case 'download':
+      return 'downloads folder';
+    case 'google-drive':
+      return 'Google Drive (Spottr folder)';
+    case 'memory':
+    case null:
+    case undefined:
+    default:
+      return 'unknown';
+  }
 }

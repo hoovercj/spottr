@@ -47,7 +47,7 @@ export interface ExportRecord {
   timestamp: string;
   filename: string;
   byteSize: number;
-  destinationKind: 'local-directory' | 'download';
+  destinationKind: 'local-directory' | 'download' | 'google-drive';
 }
 
 export type ExportFailureReason =

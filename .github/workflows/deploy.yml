@@ -39,6 +39,11 @@ jobs:
       - run: pnpm test
 
       - run: pnpm build
+        env:
+          # Optional: set this repo secret to enable the Google Drive
+          # destination. See docs/google-drive-setup.md. Empty is fine —
+          # the Drive option just stays hidden in the app.
+          VITE_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GOOGLE_OAUTH_CLIENT_ID }}
 
       - uses: actions/upload-pages-artifact@v3
         with:

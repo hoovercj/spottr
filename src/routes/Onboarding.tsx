@@ -1,17 +1,36 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Button, Stack, Typography } from '@mui/material';
+import { Box, Button, Divider, Stack, Typography } from '@mui/material';
 import {
   chooseDownloadFallback,
   chooseLocalDirectory,
   supportsFileSystemAccess,
 } from '@/features/export/destination';
+import { connectGoogleDrive, isGoogleDriveAvailable } from '@/features/export/googleDrive';
 
 export function Onboarding() {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fsaSupported = supportsFileSystemAccess();
+  const driveAvailable = isGoogleDriveAvailable();
+
+  const pickDrive = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await connectGoogleDrive();
+      void navigate('/', { replace: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not connect Google Drive';
+      // The user closing the consent popup surfaces as a popup_closed-style
+      // error — treat that as a silent cancel rather than a loud failure.
+      if (/popup|closed|cancel/i.test(msg)) setError(null);
+      else setError(msg);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const pickFolder = async () => {
     setBusy(true);
@@ -75,11 +94,24 @@ export function Onboarding() {
           </Box>
         )}
 
+        {driveAvailable && (
+          <>
+            <Button onClick={() => void pickDrive()} disabled={busy} fullWidth variant="contained">
+              Connect Google Drive
+            </Button>
+            <Typography variant="caption" color="text.secondary">
+              Backups land in a Spottr folder in your Drive. Only files Spottr creates are visible
+              to the app.
+            </Typography>
+            <Divider sx={{ my: 1 }}>or</Divider>
+          </>
+        )}
+
         <Button
           onClick={() => void pickFolder()}
           disabled={busy || !fsaSupported}
           fullWidth
-          variant="contained"
+          variant={driveAvailable ? 'outlined' : 'contained'}
         >
           Choose a folder on this device
         </Button>

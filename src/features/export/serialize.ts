@@ -73,5 +73,5 @@ export function serializeJson(payload: ExportPayload): string {
  * export.
  */
 export function exportFilename(_exportedAt: string, ext: 'json' | 'csv'): string {
-  return `workoutbuddy-backup.${ext}`;
+  return `spottr-backup.${ext}`;
 }

@@ -26,7 +26,8 @@ export function ExportStatusLine({ status }: ExportStatusLineProps) {
     <Stack spacing={0.5}>
       {status.lastOk ? (
         <Typography variant="body2" color="text.secondary">
-          Last export: {formatRelative(status.lastOk.timestamp)} ({status.lastOk.destinationKind}).
+          Last export: {formatRelative(status.lastOk.timestamp)} (
+          {destinationLabel(status.lastOk.destinationKind)}).
         </Typography>
       ) : (
         <Typography variant="body2" color="text.secondary">
@@ -40,6 +41,17 @@ export function ExportStatusLine({ status }: ExportStatusLineProps) {
       )}
     </Stack>
   );
+}
+
+function destinationLabel(kind: 'local-directory' | 'download' | 'google-drive'): string {
+  switch (kind) {
+    case 'local-directory':
+      return 'folder';
+    case 'download':
+      return 'downloads';
+    case 'google-drive':
+      return 'Google Drive';
+  }
 }
 
 function formatRelative(iso: string): string {

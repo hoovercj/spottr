@@ -76,6 +76,9 @@ export async function runExport(opts: ExportInvocation): Promise<ExportResult | 
     timestamp: payload.exportedAt,
     filename: jsonFile.name,
     byteSize: json.length,
+    // 'memory' is a test-only kind; map it to local-directory in the
+    // persisted record so production readers (status line, history view)
+    // never see it.
     destinationKind: destination.kind === 'memory' ? 'local-directory' : destination.kind,
   };
   await getDb().meta.put({ key: META_LAST_OK, value: { ...record, trigger: opts.trigger } });

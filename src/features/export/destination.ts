@@ -22,7 +22,7 @@ export interface ExportFile {
 }
 
 export interface ExportDestination {
-  kind: 'local-directory' | 'download' | 'memory';
+  kind: 'local-directory' | 'download' | 'google-drive' | 'memory';
   write(file: ExportFile): Promise<void>;
 }
 
@@ -136,6 +136,12 @@ export async function getDestination(): Promise<ExportDestination> {
   }
   if (kind === 'download') {
     return new DownloadDestination();
+  }
+  if (kind === 'google-drive') {
+    // Imported lazily so the GIS network call + ~30KB module aren't paid
+    // for users on a local-file destination.
+    const { buildGoogleDriveDestination } = await import('@/features/export/googleDrive');
+    return buildGoogleDriveDestination();
   }
   throw new Error('No export destination configured');
 }
