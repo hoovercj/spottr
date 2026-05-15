@@ -191,9 +191,12 @@ function resolveSingle(norm) {
     deadlift: { family: 'Deadlift', variantKind: 'barbell' },
     'barbell rows': { family: 'Row', variantKind: 'machine', expandSingleSetTo: 5 },
     'pulldowns/pullups/chinups': { family: 'Lat Pulldown', variantKind: 'machine' },
-    'chest supported rows/seated cable rows': { family: 'Row', variantKind: 'cable' },
+    'chest supported rows/seated cable rows': {
+      family: 'Seated Cable Row',
+      variantKind: 'cable',
+    },
     'face pulls': { family: 'Face Pull', variantKind: 'cable' },
-    'hammer curls': { family: 'Bicep Curl', variantKind: 'dumbbell' },
+    'hammer curls': { family: 'Hammer Curl', variantKind: 'dumbbell' },
     'dumbbell curls': { family: 'Bicep Curl', variantKind: 'dumbbell' },
     'rear delt': { family: 'Rear Delt Fly', variantKind: 'cable' },
     'reverse fly': { family: 'Rear Delt Fly', variantKind: 'dumbbell' },
@@ -213,7 +216,7 @@ function resolveSingle(norm) {
     'leg curls': { family: 'Leg Curl', variantKind: 'machine' },
     'leg curl': { family: 'Leg Curl', variantKind: 'machine' },
     'calf raises': { family: 'Calf Raise', variantKind: 'machine' },
-    'hammer curl/cable upright row': { family: 'Bicep Curl', variantKind: 'dumbbell' },
+    'hammer curl/cable upright row': { family: 'Hammer Curl', variantKind: 'dumbbell' },
     dips: { family: 'Dip', variantKind: 'bodyweight' },
   };
   const hit = map[norm];

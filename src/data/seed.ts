@@ -34,8 +34,10 @@ const SEED_LIFT_LIBRARY: SeedFamily[] = [
   { name: 'Dip', variants: ['bodyweight', 'machine'] },
   { name: 'Pull-up', variants: ['bodyweight', 'machine'] },
   { name: 'Row', variants: ['barbell', 'dumbbell', 'cable', 'machine'] },
+  { name: 'Seated Cable Row', variants: ['cable'] },
   { name: 'Lat Pulldown', variants: ['cable', 'machine'] },
   { name: 'Bicep Curl', variants: ['barbell', 'dumbbell', 'cable'] },
+  { name: 'Hammer Curl', variants: ['dumbbell', 'cable'] },
   { name: 'Face Pull', variants: ['cable'] },
   { name: 'Squat', variants: ['barbell', 'machine', 'smith-machine'] },
   { name: 'Front Squat', variants: ['barbell'] },
@@ -81,10 +83,10 @@ const PPL_SEED_PROGRAM: SeedSlot[] = [
     lifts: [
       { familyName: 'Row', variantKind: 'machine', sets: 5, repsMin: 5, repsMax: 5 },
       { familyName: 'Lat Pulldown', variantKind: 'machine', sets: 3, repsMin: 8, repsMax: 12 },
-      { familyName: 'Row', variantKind: 'cable', sets: 3, repsMin: 8, repsMax: 12 },
+      { familyName: 'Seated Cable Row', variantKind: 'cable', sets: 3, repsMin: 8, repsMax: 12 },
       { familyName: 'Face Pull', variantKind: 'cable', sets: 5, repsMin: 15, repsMax: 20 },
       { familyName: 'Bicep Curl', variantKind: 'dumbbell', sets: 4, repsMin: 8, repsMax: 12 },
-      { familyName: 'Bicep Curl', variantKind: 'dumbbell', sets: 4, repsMin: 8, repsMax: 12 },
+      { familyName: 'Hammer Curl', variantKind: 'dumbbell', sets: 4, repsMin: 8, repsMax: 12 },
       { familyName: 'Rear Delt Fly', variantKind: 'cable', sets: 3, repsMin: 12, repsMax: 12 },
     ],
   },
@@ -131,15 +133,20 @@ const PPL_SEED_PROGRAM: SeedSlot[] = [
     ],
   },
   {
+    // Thursday Pull — going-forward plan: pull-ups for the primary heavy
+    // lift and a bench-press accessory (Cody wants more horizontal-push
+    // exposure on the second pull day). The rest mirrors Monday Pull's
+    // accessory shape so reps/variants stay legible across the week.
     splitDayName: 'Pull',
     isRest: false,
     lifts: [
-      { familyName: 'Row', variantKind: 'machine', sets: 5, repsMin: 5, repsMax: 5 },
+      { familyName: 'Pull-up', variantKind: 'bodyweight', sets: 5, repsMin: 5, repsMax: 5 },
+      { familyName: 'Bench Press', variantKind: 'machine', sets: 3, repsMin: 8, repsMax: 12 },
       { familyName: 'Lat Pulldown', variantKind: 'machine', sets: 3, repsMin: 8, repsMax: 12 },
-      { familyName: 'Row', variantKind: 'cable', sets: 3, repsMin: 8, repsMax: 12 },
+      { familyName: 'Seated Cable Row', variantKind: 'cable', sets: 3, repsMin: 8, repsMax: 12 },
       { familyName: 'Face Pull', variantKind: 'cable', sets: 5, repsMin: 15, repsMax: 20 },
       { familyName: 'Bicep Curl', variantKind: 'dumbbell', sets: 4, repsMin: 8, repsMax: 12 },
-      { familyName: 'Bicep Curl', variantKind: 'dumbbell', sets: 4, repsMin: 8, repsMax: 12 },
+      { familyName: 'Hammer Curl', variantKind: 'dumbbell', sets: 4, repsMin: 8, repsMax: 12 },
       { familyName: 'Rear Delt Fly', variantKind: 'dumbbell', sets: 3, repsMin: 12, repsMax: 12 },
     ],
   },
