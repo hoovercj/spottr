@@ -29,7 +29,11 @@ export function ComposerView() {
           py: 1,
           pb: 'calc(env(safe-area-inset-bottom, 0px) + 8px)',
           display: 'flex',
-          alignItems: 'flex-end',
+          // Center-align: a 48px IconButton next to a small TextField looks
+          // best with their visual centers aligned. flex-end would put both
+          // bottoms flush, but the icon's optical center then sits noticeably
+          // higher than the text baseline of the field.
+          alignItems: 'center',
           gap: 1,
         }}
       >

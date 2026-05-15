@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useState } from 'react';
-import { AppBar, Dialog, IconButton, Toolbar, Typography } from '@mui/material';
+import { Box, Dialog, IconButton, Tooltip, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { ChatThread } from '@/features/ai/chat/ChatThread';
@@ -17,7 +17,7 @@ export interface ChatDialogProps {
 }
 
 interface SessionApi {
-  reset: () => void;
+  reset: () => Promise<void>;
   isEmpty: boolean;
 }
 
@@ -36,27 +36,59 @@ export function ChatDialog({ open, onClose }: ChatDialogProps) {
       disableScrollLock
       slotProps={{
         paper: {
-          sx: { height: '100dvh', display: 'flex', flexDirection: 'column' },
+          sx: {
+            height: '100dvh',
+            display: 'flex',
+            flexDirection: 'column',
+            // Explicit so the header (below) and the composer (sticky-
+            // bottom in ChatThread) all sit on the same tone. The MUI
+            // <AppBar> we previously used resolved to palette.AppBar.darkBg
+            // (~#272727) in dark mode, which differs from background.paper
+            // (~#16161A) — that step was the "weird grey" seam.
+            bgcolor: 'background.paper',
+          },
         },
       }}
     >
-      <AppBar position="static" elevation={0} color="default">
-        <Toolbar sx={{ minHeight: 48, gap: 1 }}>
-          <Typography variant="h6" sx={{ flex: 1 }}>
-            Coach
-          </Typography>
-          <IconButton
-            aria-label="New conversation"
-            onClick={() => api?.reset()}
-            disabled={!api || api.isEmpty}
-          >
-            <RestartAltIcon />
-          </IconButton>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          px: 2,
+          py: 1,
+          minHeight: 56,
+          // Respect the device notch when the dialog is opened full-screen
+          // on iOS.
+          pt: 'calc(env(safe-area-inset-top, 0px) + 8px)',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          // Same as the Paper above — keeps everything one flat tone.
+          bgcolor: 'background.paper',
+        }}
+      >
+        <Typography variant="h6" sx={{ flex: 1 }}>
+          Coach
+        </Typography>
+        <Tooltip title="New conversation">
+          <span>
+            <IconButton
+              aria-label="New conversation"
+              onClick={() => {
+                void api?.reset();
+              }}
+              disabled={!api || api.isEmpty}
+            >
+              <RestartAltIcon />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title="Close">
           <IconButton aria-label="Close" onClick={onClose}>
             <CloseIcon />
           </IconButton>
-        </Toolbar>
-      </AppBar>
+        </Tooltip>
+      </Box>
 
       <ChatThread onSessionReady={onReady} />
     </Dialog>

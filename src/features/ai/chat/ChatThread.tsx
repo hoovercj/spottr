@@ -32,7 +32,7 @@ export interface ChatThreadHandles {
 export function ChatThread({
   onSessionReady,
 }: {
-  onSessionReady?: (api: { reset: () => void; isEmpty: boolean }) => void;
+  onSessionReady?: (api: { reset: () => Promise<void>; isEmpty: boolean }) => void;
 }) {
   const session = useChatSession();
   const runtime = useChatRuntime(session);
