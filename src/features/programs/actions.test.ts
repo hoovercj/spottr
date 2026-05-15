@@ -115,7 +115,9 @@ describe('program actions', () => {
         break;
       }
     }
-    expect(slot).toBeDefined();
+    if (!slot) {
+      throw new Error('Expected at least one slot with >=2 plans');
+    }
     const plans = await db.slotPlan.where('scheduleSlotId').equals(slot.id).sortBy('orderIndex');
     const a = plans[0]!;
     const b = plans[1]!;
