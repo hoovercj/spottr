@@ -5,7 +5,8 @@
  * the home-bar from eating the affordance on iOS.
  */
 
-import { ComposerPrimitive, useThread } from '@assistant-ui/react';
+import type { KeyboardEvent } from 'react';
+import { ComposerPrimitive, useComposerRuntime, useThread } from '@assistant-ui/react';
 import { Box, IconButton, TextField, Tooltip } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import StopIcon from '@mui/icons-material/Stop';
@@ -15,6 +16,21 @@ export function ComposerView() {
   // dictation) — not on whether the *thread* is running. We pull the
   // thread state directly so the Send/Stop swap is correct.
   const isRunning = useThread((t) => t.isRunning);
+  const composer = useComposerRuntime();
+
+  // ComposerPrimitive.Input ships built-in Enter-to-send via `submitMode`,
+  // but that handler attaches to the rendered element. We use `asChild`
+  // with MUI's TextField, which forwards props to its OUTER wrapper, not
+  // to the inner textarea where the user actually presses keys — so the
+  // primitive's keydown never fires. We wire submit ourselves on the
+  // inner input element via slotProps.htmlInput.
+  const onInputKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== 'Enter') return;
+    if (e.shiftKey) return; // Shift+Enter → newline
+    if (e.nativeEvent.isComposing) return; // IME composing → don't submit
+    e.preventDefault();
+    void composer.send();
+  };
 
   return (
     <ComposerPrimitive.Root asChild>
@@ -48,6 +64,7 @@ export function ComposerView() {
               htmlInput: {
                 inputMode: 'text',
                 enterKeyHint: 'send',
+                onKeyDown: onInputKeyDown,
               },
             }}
             sx={{

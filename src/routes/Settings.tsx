@@ -34,6 +34,7 @@ import { syncWithDriveBackup } from '@/features/export/driveSync';
 import { wipeAllData } from '@/data/reset';
 import { seedFakeHistory } from '@/data/fakeHistory';
 import { AISettingsPanel } from '@/features/ai/settings/AISettingsPanel';
+import { ThemeModeToggle } from '@/features/settings/ThemeModeToggle';
 
 export function Settings() {
   const status = useExportStatus();
@@ -209,6 +210,10 @@ export function Settings() {
         }}
       >
         <Stack spacing={2}>
+          <ThemeModeToggle />
+
+          <Divider sx={{ my: 1 }} />
+
           <Typography variant="h2">Default units</Typography>
           <Typography variant="body2" color="text.secondary">
             The weight unit used everywhere a location doesn't have its own override.

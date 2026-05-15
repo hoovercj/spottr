@@ -51,16 +51,21 @@ function paletteSpec(p: Palette, mode: 'light' | 'dark') {
 }
 
 export const theme = createTheme({
-  // Media-query selector (the MUI v6 default) makes the scheme follow the
-  // browser's prefers-color-scheme. A future settings override would swap to
-  // 'data' and set `data-mui-color-scheme` on `<html>`.
+  // Data-attribute selector: the active scheme is read from
+  // `<html data-mui-color-scheme="…">`. This lets the Settings toggle
+  // override the OS preference. `applyThemeMode` in
+  // `src/features/settings/themeMode.ts` owns writing that attribute;
+  // for the "System" preference it mirrors `prefers-color-scheme` and
+  // listens for changes so flipping the OS theme also flips the app
+  // live. The default scheme (used when no attribute is set yet — e.g.
+  // a stray HMR boot before the apply hook runs) stays dark.
   colorSchemes: {
     light: { palette: paletteSpec(lightPalette, 'light') },
     dark: { palette: paletteSpec(darkPalette, 'dark') },
   },
   defaultColorScheme: 'dark',
   cssVariables: {
-    colorSchemeSelector: 'media',
+    colorSchemeSelector: 'data',
   },
   spacing: spacing.unit,
   shape: {
