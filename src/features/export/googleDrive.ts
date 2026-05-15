@@ -233,12 +233,31 @@ export async function disconnectGoogleDrive(): Promise<void> {
   }
 }
 
+export interface DriveWriteResult {
+  fileId: string;
+  headRevisionId: string;
+}
+
+export interface DriveFileMeta {
+  fileId: string;
+  headRevisionId: string;
+  modifiedTime: string;
+}
+
 export class GoogleDriveDestination implements ExportDestination {
   kind = 'google-drive' as const;
+  /** Populated as the most recent write's result so the service layer can
+   * persist (fileId, headRevisionId) into meta:lastOk. */
+  lastWrite: DriveWriteResult | null = null;
 
   constructor(private readonly folderId: string) {}
 
   async write(file: ExportFile): Promise<void> {
+    const result = await this.upload(file);
+    this.lastWrite = result;
+  }
+
+  async upload(file: ExportFile): Promise<DriveWriteResult> {
     const escaped = file.name.replace(/'/g, "\\'");
     const q = encodeURIComponent(
       `name = '${escaped}' and '${this.folderId}' in parents and trashed = false`,
@@ -263,16 +282,68 @@ export class GoogleDriveDestination implements ExportDestination {
       `--${boundary}--`;
 
     const url = existingId
-      ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart`
-      : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+      ? `https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart&fields=id,headRevisionId`
+      : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,headRevisionId`;
     const method = existingId ? 'PATCH' : 'POST';
 
-    await driveFetch<{ id: string }>(url, {
+    const resp = await driveFetch<{ id: string; headRevisionId?: string }>(url, {
       method,
       headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
       body,
     });
+    return { fileId: resp.id, headRevisionId: resp.headRevisionId ?? '' };
   }
+}
+
+/**
+ * Look up the current head revision of the JSON backup in the Spottr
+ * folder. Returns null when:
+ *   - Drive isn't connected for this build (no client id), or
+ *   - the user previously connected but the folder pointer is stale, or
+ *   - the file doesn't exist yet (first-time push hasn't happened).
+ * Throws on auth / network errors so callers can distinguish "not synced
+ * yet" from "Drive said no."
+ */
+export async function fetchDriveBackupMeta(filename: string): Promise<DriveFileMeta | null> {
+  if (!CLIENT_ID) return null;
+  const folderRow = await getDb().meta.get(META_FOLDER_KEY);
+  const folderId = (folderRow?.value as DriveFolderMeta | undefined)?.folderId;
+  if (!folderId) return null;
+  await requestAccessToken('');
+  const escaped = filename.replace(/'/g, "\\'");
+  const q = encodeURIComponent(
+    `name = '${escaped}' and '${folderId}' in parents and trashed = false`,
+  );
+  const search = await driveFetch<{ files: Array<{ id: string }> }>(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`,
+  );
+  const fileId = search.files[0]?.id;
+  if (!fileId) return null;
+  const meta = await driveFetch<{
+    id: string;
+    headRevisionId?: string;
+    modifiedTime?: string;
+  }>(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,headRevisionId,modifiedTime`);
+  return {
+    fileId: meta.id,
+    headRevisionId: meta.headRevisionId ?? '',
+    modifiedTime: meta.modifiedTime ?? '',
+  };
+}
+
+/** Stream the JSON backup's contents from Drive into a parsed payload. */
+export async function downloadDriveBackup(filename: string): Promise<string | null> {
+  const meta = await fetchDriveBackupMeta(filename);
+  if (!meta) return null;
+  const token = await requestAccessToken('');
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${meta.fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Drive download failed: ${res.status} ${text || res.statusText}`);
+  }
+  return res.text();
 }
 
 /** Resolve the persisted folder id and build a destination ready to write. */

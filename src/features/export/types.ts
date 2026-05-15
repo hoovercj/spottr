@@ -48,6 +48,14 @@ export interface ExportRecord {
   filename: string;
   byteSize: number;
   destinationKind: 'local-directory' | 'download' | 'google-drive';
+  /**
+   * Drive-only: id and revision id of the JSON file after a successful
+   * upload. The next export uses these to detect concurrent writes from
+   * another device — if Drive's current `headRevisionId` no longer matches,
+   * we know somebody else wrote in between and refuse to overwrite.
+   */
+  driveFileId?: string;
+  driveRevisionId?: string;
 }
 
 export type ExportFailureReason =
@@ -57,7 +65,11 @@ export type ExportFailureReason =
   | 'PERMISSION_REVOKED'
   | 'PICKER_DISMISSED'
   | 'UNSUPPORTED_BROWSER'
-  | 'WRITE_FAILED';
+  | 'WRITE_FAILED'
+  /** Drive-only: the remote file has been written by another device since
+   * we last synced; pushing would clobber that change. The UI surfaces a
+   * "restore from Drive first" prompt instead of overwriting. */
+  | 'REMOTE_NEWER';
 
 export interface ExportFailure {
   timestamp: string;

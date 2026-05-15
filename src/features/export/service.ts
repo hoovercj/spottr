@@ -16,6 +16,7 @@ import { exportFilename, serializeJson, buildExportPayload } from '@/features/ex
 import { serializeCsv } from '@/features/export/csv';
 import { getDestination, type ExportDestination } from '@/features/export/destination';
 import type { ExportFailure, ExportPayload, ExportRecord } from '@/features/export/types';
+import type { DriveWriteResult } from '@/features/export/googleDrive';
 
 const META_LAST_OK = 'export:lastOk';
 const META_LAST_FAIL = 'export:lastFail';
@@ -37,12 +38,40 @@ export interface ExportError {
   failure: ExportFailure;
 }
 
-export async function runExport(opts: ExportInvocation): Promise<ExportResult | ExportError> {
+export interface RunExportOptions extends ExportInvocation {
+  /**
+   * Drive-only: skip the "remote-is-newer" guard. Used by the
+   * "overwrite anyway" path after the user has reviewed the conflict
+   * banner and decided their local copy is authoritative.
+   */
+  force?: boolean;
+}
+
+export async function runExport(opts: RunExportOptions): Promise<ExportResult | ExportError> {
   let destination: ExportDestination;
   try {
     destination = await getDestination();
   } catch (err: unknown) {
     return failure('AUTH_EXPIRED', err);
+  }
+
+  // Drive precondition: refuse to upload if the remote head revision has
+  // changed since we last wrote — another device pushed in between, and
+  // overwriting would silently clobber that work.
+  if (destination.kind === 'google-drive' && !opts.force) {
+    try {
+      const conflict = await checkDriveConflict();
+      if (conflict) {
+        return failure(
+          'REMOTE_NEWER',
+          new Error(
+            `Drive backup has been written by another device (revision ${conflict.remote}) since this device's last push (revision ${conflict.local}). Restore from Drive before overwriting.`,
+          ),
+        );
+      }
+    } catch (err: unknown) {
+      return failure('NETWORK_ERROR', err);
+    }
   }
 
   let payload: ExportPayload;
@@ -72,6 +101,14 @@ export async function runExport(opts: ExportInvocation): Promise<ExportResult | 
     return failure(destinationFailureReason(destination, err), err);
   }
 
+  // Drive write returns the new head revision id via the destination's
+  // `lastWrite` slot; persist it so the next push can detect concurrent
+  // writes from another device.
+  const driveWrite =
+    destination.kind === 'google-drive'
+      ? (destination as ExportDestination & { lastWrite: DriveWriteResult | null }).lastWrite
+      : null;
+
   const record: ExportRecord = {
     timestamp: payload.exportedAt,
     filename: jsonFile.name,
@@ -80,11 +117,35 @@ export async function runExport(opts: ExportInvocation): Promise<ExportResult | 
     // persisted record so production readers (status line, history view)
     // never see it.
     destinationKind: destination.kind === 'memory' ? 'local-directory' : destination.kind,
+    ...(driveWrite?.fileId ? { driveFileId: driveWrite.fileId } : {}),
+    ...(driveWrite?.headRevisionId ? { driveRevisionId: driveWrite.headRevisionId } : {}),
   };
   await getDb().meta.put({ key: META_LAST_OK, value: { ...record, trigger: opts.trigger } });
   await getDb().meta.delete(META_LAST_FAIL);
 
   return { ok: true, record, payload };
+}
+
+/**
+ * Look up the current Drive head revision and compare it with the one we
+ * persisted on our last successful push. Returns null when there's nothing
+ * to compare against (Drive file doesn't exist yet, or we've never pushed)
+ * — in either case the upload should proceed.
+ */
+async function checkDriveConflict(): Promise<{ local: string; remote: string } | null> {
+  const { fetchDriveBackupMeta } = await import('@/features/export/googleDrive');
+  const lastOk = (await getDb().meta.get(META_LAST_OK))?.value as
+    | (ExportRecord & { trigger: ExportTrigger })
+    | undefined;
+  const filename = exportFilename('', 'json');
+  const meta = await fetchDriveBackupMeta(filename);
+  if (!meta) return null; // no file yet → first push
+  const localRev = lastOk?.driveRevisionId;
+  if (!localRev) return null; // never pushed → no baseline to compare
+  if (meta.headRevisionId && meta.headRevisionId !== localRev) {
+    return { local: localRev, remote: meta.headRevisionId };
+  }
+  return null;
 }
 
 export interface LastExportStatus {

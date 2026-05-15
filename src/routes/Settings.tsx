@@ -40,12 +40,20 @@ export function Settings() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const exportNow = async () => {
+  const [conflictOpen, setConflictOpen] = useState(false);
+
+  const exportNow = async (force = false) => {
     setBusy(true);
     setError(null);
-    const result = await runExport({ trigger: 'manual' });
+    const result = await runExport({ trigger: 'manual', force });
     setBusy(false);
-    if (!result.ok) setError(result.failure.message);
+    if (!result.ok) {
+      if (result.failure.reason === 'REMOTE_NEWER') {
+        setConflictOpen(true);
+        return;
+      }
+      setError(result.failure.message);
+    }
   };
 
   const switchToFolder = async () => {
@@ -216,7 +224,12 @@ export function Settings() {
             </Box>
           )}
 
-          <Button onClick={() => void exportNow()} disabled={busy} variant="contained" fullWidth>
+          <Button
+            onClick={() => void exportNow(false)}
+            disabled={busy}
+            variant="contained"
+            fullWidth
+          >
             Export now
           </Button>
 
@@ -354,6 +367,40 @@ export function Settings() {
             variant="contained"
           >
             Reset
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={conflictOpen}
+        onClose={() => setConflictOpen(false)}
+        aria-labelledby="drive-conflict-title"
+      >
+        <DialogTitle id="drive-conflict-title">Drive has newer data</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            Another device wrote to the Spottr backup on Google Drive after this device's last push.
+            Overwriting now would replace those changes with what's on this device.
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            Restore from Drive first to pull the newer data in, or force an overwrite if you're sure
+            this device is the authoritative copy.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConflictOpen(false)} variant="text">
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              setConflictOpen(false);
+              void exportNow(true);
+            }}
+            color="error"
+            variant="text"
+            disabled={busy}
+          >
+            Overwrite anyway
           </Button>
         </DialogActions>
       </Dialog>

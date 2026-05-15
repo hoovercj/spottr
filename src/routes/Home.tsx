@@ -12,6 +12,7 @@ import { detectEvictionState } from '@/features/lifecycle/eviction';
 import { LocationPicker } from '@/components/LocationPicker';
 import { RoutinePicker } from '@/components/RoutinePicker';
 import { BottomListDrawer } from '@/components/BottomListDrawer';
+import { DriveSyncBanner } from '@/components/DriveSyncBanner';
 
 export function Home() {
   const status = useExportStatus();
@@ -205,11 +206,14 @@ export function Home() {
           gap: 2,
         }}
       >
+        <DriveSyncBanner />
+
         {active && (
           <Box
             sx={{
               border: '1px solid',
               borderColor: 'primary.main',
+              backgroundColor: 'var(--mui-palette-plateTint-green)',
               borderRadius: 1,
               p: 2,
               display: 'flex',
@@ -567,22 +571,41 @@ function formatRelative(iso: string): string {
 }
 
 function cardSx({ today, dim }: { today: boolean; dim: boolean }) {
+  // Today's card: 4px blue plate stripe on the left edge (via ::before so
+  // the stripe doesn't push content), plus a faint blue-tint wash over the
+  // paper bg for branded depth.
   return {
     all: 'unset' as const,
     boxSizing: 'border-box' as const,
     display: 'block',
     width: '100%',
     cursor: 'pointer',
+    position: 'relative' as const,
     border: '1px solid',
-    borderColor: today ? 'primary.main' : 'divider',
+    borderColor: today ? 'plates.blue' : 'divider',
     borderRadius: 1,
     p: today ? 2 : 1.5,
-    backgroundColor: today ? 'background.paper' : 'transparent',
+    backgroundColor: 'background.paper',
+    backgroundImage: today
+      ? `linear-gradient(var(--mui-palette-plateTint-blue), var(--mui-palette-plateTint-blue))`
+      : 'none',
     minHeight: today ? 120 : 64,
     opacity: dim ? 0.6 : 1,
+    ...(today && {
+      '&::before': {
+        content: '""',
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 4,
+        backgroundColor: 'var(--mui-palette-plates-blue)',
+        borderRadius: '8px 0 0 8px',
+      },
+    }),
     '&:focus-visible': {
       outline: '2px solid',
-      outlineColor: 'primary.main',
+      outlineColor: 'plates.blue',
       outlineOffset: 2,
     },
   };
