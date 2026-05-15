@@ -51,10 +51,9 @@ export function NumericKeypad(props: NumericKeypadProps) {
 
   const step = (delta: number) => {
     const current = parsed ?? 0;
-    const next = Math.max(
-      0,
-      roundToStep(current + delta, props.variant === 'weight' ? props.step : 1),
-    );
+    // Snap to the smallest legal increment so chained taps don't drift.
+    const snap = props.variant === 'weight' ? minStep(props.unitLabel) : 1;
+    const next = Math.max(0, roundToStep(current + delta, snap));
     setDraft(formatDraftValue(next, props.variant));
   };
 
@@ -98,24 +97,22 @@ export function NumericKeypad(props: NumericKeypadProps) {
           {draft || '0'}
         </Typography>
 
-        <Stack direction="row" spacing={1.5} justifyContent="space-between">
-          <Button
-            variant="text"
-            onClick={() => step(-(props.variant === 'weight' ? props.step : 1))}
-            aria-label={`decrease by ${props.variant === 'weight' ? props.step : 1}`}
-            sx={{ flex: 1, minHeight: 48 }}
-          >
-            − {props.variant === 'weight' ? props.step : 1}
-          </Button>
-          <Button
-            variant="text"
-            onClick={() => step(props.variant === 'weight' ? props.step : 1)}
-            aria-label={`increase by ${props.variant === 'weight' ? props.step : 1}`}
-            sx={{ flex: 1, minHeight: 48 }}
-          >
-            + {props.variant === 'weight' ? props.step : 1}
-          </Button>
-        </Stack>
+        {props.variant === 'weight' && (
+          <Stack direction="row" spacing={1} justifyContent="space-between">
+            {weightStepButtons(props.unitLabel).map((delta) => (
+              <Button
+                key={delta}
+                variant="text"
+                color={delta < 0 ? 'error' : 'secondary'}
+                onClick={() => step(delta)}
+                aria-label={`${delta < 0 ? 'decrease' : 'increase'} by ${Math.abs(delta)}`}
+                sx={{ flex: 1, minHeight: 48, fontSize: '0.95rem', px: 0 }}
+              >
+                {delta < 0 ? '−' : '+'} {Math.abs(delta)}
+              </Button>
+            ))}
+          </Stack>
+        )}
 
         <Box
           sx={{
@@ -130,13 +127,14 @@ export function NumericKeypad(props: NumericKeypadProps) {
               variant="text"
               onClick={() => appendDigit(d)}
               aria-label={`digit ${d}`}
-              sx={{ minHeight: 56, fontSize: '1.25rem' }}
+              sx={{ minHeight: 56, fontSize: '1.25rem', color: 'text.primary' }}
             >
               {d}
             </Button>
           ))}
           <Button
             variant="text"
+            color="warning"
             onClick={clear}
             aria-label="clear"
             sx={{ minHeight: 56, fontSize: '1.25rem' }}
@@ -147,7 +145,7 @@ export function NumericKeypad(props: NumericKeypadProps) {
             variant="text"
             onClick={() => appendDigit('0')}
             aria-label="digit 0"
-            sx={{ minHeight: 56, fontSize: '1.25rem' }}
+            sx={{ minHeight: 56, fontSize: '1.25rem', color: 'text.primary' }}
           >
             0
           </Button>
@@ -156,7 +154,7 @@ export function NumericKeypad(props: NumericKeypadProps) {
             onClick={appendDot}
             aria-label="decimal point"
             disabled={props.variant !== 'weight'}
-            sx={{ minHeight: 56, fontSize: '1.25rem' }}
+            sx={{ minHeight: 56, fontSize: '1.25rem', color: 'text.primary' }}
           >
             .
           </Button>
@@ -174,6 +172,20 @@ export function NumericKeypad(props: NumericKeypadProps) {
       </Box>
     </SwipeableDrawer>
   );
+}
+
+// Two plate pairs per unit cover the most common plate math: kg gets the
+// 1.25 kg and 2.5 kg pairs (5 kg and 10 kg per-bar deltas after both sides
+// are loaded); lb gets the 2.5 lb and 5 lb pairs (5 and 10 per-bar). The
+// step buttons are bar-delta values so a single tap mirrors adding /
+// removing one pair of plates to the bar.
+function weightStepButtons(unitLabel: string): number[] {
+  if (unitLabel === 'kg') return [-2.5, -1.25, 1.25, 2.5];
+  return [-5, -2.5, 2.5, 5];
+}
+
+function minStep(unitLabel: string): number {
+  return unitLabel === 'kg' ? 1.25 : 2.5;
 }
 
 function parseDraft(s: string, variant: KeypadVariant): number | null {

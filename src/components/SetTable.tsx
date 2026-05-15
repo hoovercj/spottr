@@ -18,9 +18,22 @@ export interface SetRowView {
   setNumber: number;
   plannedWeight: number | null;
   plannedReps: number;
+  /** Lower bound of the target rep range — drives under-range yellow tint. */
+  plannedRepsMin: number;
+  /** Upper bound — exceeded gets the green tint. */
+  plannedRepsMax: number;
   loggedWeight: number | null;
   loggedReps: number | null;
   state: SetRowState;
+}
+
+type RowRangeStatus = 'under' | 'in-range' | 'over';
+
+function rangeStatusFor(row: SetRowView): RowRangeStatus | null {
+  if (row.state !== 'logged' || row.loggedReps == null) return null;
+  if (row.loggedReps < row.plannedRepsMin) return 'under';
+  if (row.loggedReps > row.plannedRepsMax) return 'over';
+  return 'in-range';
 }
 
 export interface SetTableProps {
@@ -89,9 +102,31 @@ function SetTableRow({
   // In read-only view mode the trailing × column collapses so the layout
   // stays balanced with the rest of the row.
   const gridTemplate = readOnly ? COLUMN_TEMPLATE_READONLY : COLUMN_TEMPLATE_INTERACTIVE;
-  // In read-only mode, weight cell is non-interactive even if "unlogged".
-  const weightCellDisabled = readOnly || logged;
-  const repsCellDisabled = readOnly || logged;
+  // Editable in both unlogged and logged states — a user who realizes they
+  // mistyped a weight after checking off the set shouldn't have to uncheck
+  // and re-check. Only true read-only mode (viewing a past session) locks
+  // the cells.
+  const weightCellDisabled = readOnly;
+  const repsCellDisabled = readOnly;
+
+  // Highlight rows whose logged reps fall outside the planned range:
+  // yellow for under-target ("missed reps") and green for over-target
+  // ("beat the range"). Renders as a left-edge stripe + faint tint so
+  // it picks up the same visual language as the today-card / note /
+  // superset surfaces.
+  const rangeStatus = rangeStatusFor(row);
+  const rangeSx =
+    rangeStatus === 'under'
+      ? {
+          backgroundColor: 'var(--mui-palette-plateTint-yellow)',
+          boxShadow: 'inset 3px 0 0 var(--mui-palette-plates-yellow)',
+        }
+      : rangeStatus === 'over'
+        ? {
+            backgroundColor: 'var(--mui-palette-plateTint-green)',
+            boxShadow: 'inset 3px 0 0 var(--mui-palette-plates-green)',
+          }
+        : null;
 
   return (
     <Box
@@ -102,6 +137,7 @@ function SetTableRow({
         alignItems: 'center',
         minHeight: 56,
         columnGap: 0.5,
+        ...(rangeSx ?? {}),
       }}
     >
       <Typography
@@ -124,14 +160,20 @@ function SetTableRow({
         </Typography>
       </CellButton>
 
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ pr: 0.5 }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="center"
+        spacing={0.5}
+        sx={{ pr: 0.5 }}
+      >
         {!readOnly && (
           <IconButton
             size="small"
             onClick={() => onAdjustReps(row.id, -1)}
             aria-label={`Decrease reps on set ${row.setNumber}`}
             disabled={displayReps <= 0}
-            sx={{ width: 44, height: 44, fontSize: '1.25rem' }}
+            sx={{ width: 44, height: 44, fontSize: '1.25rem', color: 'error.main' }}
           >
             −
           </IconButton>
@@ -150,7 +192,7 @@ function SetTableRow({
             size="small"
             onClick={() => onAdjustReps(row.id, 1)}
             aria-label={`Increase reps on set ${row.setNumber}`}
-            sx={{ width: 44, height: 44, fontSize: '1.25rem' }}
+            sx={{ width: 44, height: 44, fontSize: '1.25rem', color: 'secondary.main' }}
           >
             +
           </IconButton>
@@ -199,40 +241,52 @@ interface CellButtonProps {
   ariaLabel: string;
 }
 
-// Layout for the cell — identical in both states so the row height
-// doesn't twitch when the user toggles a set from unlogged to logged.
-// Only the wrapping element (button vs. div) and the focus/cursor styles
-// change with `disabled`.
+// One DOM shape for both states (always <button>) so the row height never
+// twitches when a set toggles between logged and unlogged. `disabled` only
+// changes interactivity affordances — cursor, focus ring, click handler —
+// never layout. Explicit `lineHeight` defends against `all: 'unset'`
+// resetting it to `normal` (~1.2) while the matching div would inherit 1.5.
+//
+// No `flex: 1` here on purpose: the weight cell is already a grid item in
+// a `1fr` column (stretches via default justify-self), and the reps cell
+// needs to size to content so it can be centered as a − [n] + group.
 const CELL_LAYOUT_SX = {
   px: 0.5,
   py: 1,
   minHeight: 56,
   display: 'flex',
   alignItems: 'center',
-  flex: 1,
   color: 'text.primary',
+  lineHeight: 1.5,
+  fontFamily: 'inherit',
+  fontSize: 'inherit',
 } as const;
 
 function CellButton({ children, onClick, disabled, ariaLabel }: CellButtonProps) {
-  if (disabled) {
-    return <Box sx={CELL_LAYOUT_SX}>{children}</Box>;
-  }
   return (
     <Box
       component="button"
       type="button"
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
       aria-label={ariaLabel}
+      disabled={disabled}
       sx={{
         all: 'unset',
         ...CELL_LAYOUT_SX,
-        cursor: 'pointer',
+        cursor: disabled ? 'default' : 'pointer',
         textAlign: 'left',
-        '&:focus-visible': {
-          outline: '2px solid',
-          outlineColor: 'primary.main',
-          outlineOffset: 2,
-        },
+        // Active state gives a brief tactile feedback in the brand green
+        // rather than the mobile-browser default tap-highlight blue.
+        '&:active': disabled
+          ? undefined
+          : { backgroundColor: 'var(--mui-palette-plateTint-green)' },
+        '&:focus-visible': disabled
+          ? undefined
+          : {
+              outline: '2px solid',
+              outlineColor: 'primary.main',
+              outlineOffset: 2,
+            },
       }}
     >
       {children}

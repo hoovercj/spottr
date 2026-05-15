@@ -6,52 +6,124 @@
  * config change, not a refactor. The light/dark palettes are wired into MUI
  * via `colorSchemes` so the browser's `prefers-color-scheme` setting picks
  * the right one automatically.
+ *
+ * Accent palette follows IWF Olympic bumper-plate colors (red 25 kg, blue
+ * 20 kg, yellow 15 kg, green 10 kg, white 5 kg, black 2.5 kg). The "logged"
+ * green doubles as the 10 kg-plate green so the established success color
+ * remains the visual spine of the system.
  */
 
+export interface PlatePalette {
+  red: string;
+  blue: string;
+  yellow: string;
+  green: string;
+  white: string;
+  black: string;
+}
+
+export interface PlateTintPalette {
+  red: string;
+  blue: string;
+  yellow: string;
+  green: string;
+}
+
 export interface Palette {
-  surface: { 0: string; 1: string; 2: string };
+  /**
+   * Surface tones ordered low → high elevation:
+   *   0 = page background (sunken)
+   *   1 = paper / default card
+   *   2 = raised tone on paper (alt rows, today-card wash base)
+   *   3 = overlay / menu / popover
+   */
+  surface: { 0: string; 1: string; 2: string; 3: string };
   text: { primary: string; secondary: string };
+  /** Back-compat aliases. New code should prefer `plates.green` / `plates.red`. */
   accent: { logged: string; error: string };
+  plates: PlatePalette;
+  /** Low-alpha plate hues ready to drop into `bgcolor`. */
+  plateTint: PlateTintPalette;
   divider: string;
   focusRing: string;
 }
 
+const darkPlates: PlatePalette = {
+  red: '#EF4444',
+  blue: '#3B82F6',
+  yellow: '#F5C518',
+  green: '#3DDC84',
+  white: '#F2F2F5',
+  black: '#0E0E10',
+};
+
+const darkPlateTint: PlateTintPalette = {
+  red: '#EF44441A',
+  blue: '#3B82F61A',
+  yellow: '#F5C5181A',
+  green: '#3DDC841A',
+};
+
 export const darkPalette: Palette = {
   surface: {
-    0: '#0E0E10',
-    1: '#1A1A1D',
-    2: '#26262A',
+    0: '#0B0B0E',
+    1: '#16161A',
+    2: '#1F1F24',
+    3: '#2A2A30',
   },
   text: {
     primary: '#F2F2F5',
     secondary: '#A8A8B0',
   },
   accent: {
-    logged: '#3DDC84',
-    error: '#FF5252',
+    logged: darkPlates.green,
+    error: darkPlates.red,
   },
+  plates: darkPlates,
+  plateTint: darkPlateTint,
   divider: '#2C2C30',
-  focusRing: '#3DDC84',
+  focusRing: darkPlates.green,
+};
+
+// Light-mode plate hues are tuned for contrast against white surfaces — the
+// dark-mode hues are too bright at full saturation on a light background.
+const lightPlates: PlatePalette = {
+  red: '#C62828',
+  blue: '#1E63D9',
+  yellow: '#C99A16',
+  green: '#1F8E50',
+  white: '#FFFFFF',
+  black: '#1A1A1D',
+};
+
+const lightPlateTint: PlateTintPalette = {
+  red: '#C6282814',
+  blue: '#1E63D914',
+  yellow: '#C99A1614',
+  green: '#1F8E5014',
 };
 
 export const lightPalette: Palette = {
   surface: {
-    0: '#FAFAFC',
+    // Page bg pulled a touch cooler/darker so paper visibly floats above it
+    // — the old `#FAFAFC` was almost indistinguishable from `#FFFFFF` paper.
+    0: '#ECECF1',
     1: '#FFFFFF',
-    2: '#F1F1F4',
+    2: '#F6F6FA',
+    3: '#FAFAFC',
   },
   text: {
     primary: '#1A1A1D',
     secondary: '#5C5C66',
   },
   accent: {
-    // Slightly darker green so it carries the same contrast against a white
-    // background that the bright dark-mode green does against near-black.
-    logged: '#1F8E50',
-    error: '#C62828',
+    logged: lightPlates.green,
+    error: lightPlates.red,
   },
+  plates: lightPlates,
+  plateTint: lightPlateTint,
   divider: '#E2E2E7',
-  focusRing: '#1F8E50',
+  focusRing: lightPlates.green,
 };
 
 /**

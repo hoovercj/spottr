@@ -39,17 +39,6 @@ import type { ProgressChartData, ProgressSeries } from '@/features/progress/quer
 import { getDb } from '@/data/db';
 import { sessionCalendarDate } from '@/features/session/queries';
 
-const SERIES_COLORS = [
-  '#3DDC84',
-  '#42A5F5',
-  '#FFB74D',
-  '#BA68C8',
-  '#FF8A65',
-  '#4DD0E1',
-  '#FFD54F',
-  '#A1887F',
-];
-
 export interface ProgressChartProps {
   data: ProgressChartData | undefined;
   height?: number;
@@ -87,6 +76,21 @@ export function ProgressChart({ data, height = 280 }: ProgressChartProps) {
 
   const axisColor = theme.palette.text.secondary;
   const gridColor = theme.palette.divider;
+
+  // Series palette is plate-color led (green, blue, red, yellow) for the
+  // first four variants — those are the high-traffic IWF bumper-plate hues
+  // and give the chart its identity. Overflow hues (purple/orange/cyan/brown)
+  // cover the rare cases where someone tracks 5+ variants of the same lift.
+  const SERIES_COLORS = [
+    theme.palette.plates.green,
+    theme.palette.plates.blue,
+    theme.palette.plates.red,
+    theme.palette.plates.yellow,
+    '#BA68C8',
+    '#FF8A65',
+    '#4DD0E1',
+    '#A1887F',
+  ];
 
   const openPoint = (s: ProgressSeries, date: string | undefined) => {
     if (!date) return;

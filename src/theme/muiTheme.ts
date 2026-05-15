@@ -1,6 +1,21 @@
 import { createTheme } from '@mui/material/styles';
 import { darkPalette, lightPalette, spacing, tapTarget, typography } from '@/theme/tokens';
-import type { Palette } from '@/theme/tokens';
+import type { Palette, PlatePalette, PlateTintPalette } from '@/theme/tokens';
+
+type SurfacePalette = { 0: string; 1: string; 2: string; 3: string };
+
+declare module '@mui/material/styles' {
+  interface Palette {
+    plates: PlatePalette;
+    plateTint: PlateTintPalette;
+    surfaces: SurfacePalette;
+  }
+  interface PaletteOptions {
+    plates?: PlatePalette;
+    plateTint?: PlateTintPalette;
+    surfaces?: SurfacePalette;
+  }
+}
 
 function paletteSpec(p: Palette, mode: 'light' | 'dark') {
   return {
@@ -14,13 +29,24 @@ function paletteSpec(p: Palette, mode: 'light' | 'dark') {
       secondary: p.text.secondary,
     },
     primary: {
-      main: p.accent.logged,
+      main: p.plates.green,
       contrastText: mode === 'dark' ? p.surface[0] : '#FFFFFF',
     },
+    secondary: {
+      main: p.plates.blue,
+      contrastText: '#FFFFFF',
+    },
+    warning: {
+      main: p.plates.yellow,
+      contrastText: mode === 'dark' ? p.surface[0] : '#1A1A1D',
+    },
     error: {
-      main: p.accent.error,
+      main: p.plates.red,
     },
     divider: p.divider,
+    plates: p.plates,
+    plateTint: p.plateTint,
+    surfaces: p.surface,
   };
 }
 
@@ -89,6 +115,12 @@ export const theme = createTheme({
         body: {
           backgroundColor: 'var(--mui-palette-background-default)',
           color: 'var(--mui-palette-text-primary)',
+        },
+        // Suppress the mobile-browser default tap highlight (typically a
+        // translucent blue/teal flash) — we render tap feedback ourselves
+        // via :active / :focus-visible so the colors stay on-brand.
+        '*': {
+          WebkitTapHighlightColor: 'transparent',
         },
         '*:focus-visible': {
           outline: '2px solid var(--mui-palette-primary-main)',

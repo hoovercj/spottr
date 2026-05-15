@@ -38,6 +38,7 @@ pnpm-debug.log*
 
 # Sandbox / generated
 *.local
+.tmp/
 
 # TypeScript incremental build cache
 *.tsbuildinfo

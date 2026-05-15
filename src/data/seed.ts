@@ -49,12 +49,20 @@ const SEED_LIFT_LIBRARY: SeedFamily[] = [
   { name: 'Calf Raise', variants: ['machine', 'smith-machine'] },
 ];
 
+/**
+ * Superset member reference. Use the bare family name when it appears
+ * exactly once in the slot; use `[family, variantKind]` to disambiguate
+ * when the same family is listed multiple times (e.g. Push days have
+ * both a cable and a dumbbell `Lateral Raise`).
+ */
+type SupersetMember = string | [string, EquipmentKind];
+
 interface SeedSlot {
   splitDayName: string;
   isRest: boolean;
   lifts: SeedLift[];
-  /** Pairs / triples of family names to programme as a superset. */
-  supersets?: string[][];
+  /** Pairs / triples of family members to programme as a superset. */
+  supersets?: SupersetMember[][];
 }
 
 interface SeedLift {
@@ -117,8 +125,8 @@ const PPL_SEED_PROGRAM: SeedSlot[] = [
       { familyName: 'Dip', variantKind: 'bodyweight', sets: 3, repsMin: 6, repsMax: 12 },
     ],
     supersets: [
-      ['Tricep Pushdown', 'Lateral Raise'],
-      ['Overhead Tricep Extension', 'Lateral Raise'],
+      ['Tricep Pushdown', ['Lateral Raise', 'cable']],
+      ['Overhead Tricep Extension', ['Lateral Raise', 'dumbbell']],
     ],
   },
   {
@@ -177,8 +185,8 @@ const PPL_SEED_PROGRAM: SeedSlot[] = [
       { familyName: 'Dip', variantKind: 'bodyweight', sets: 3, repsMin: 6, repsMax: 12 },
     ],
     supersets: [
-      ['Tricep Pushdown', 'Lateral Raise'],
-      ['Overhead Tricep Extension', 'Lateral Raise'],
+      ['Tricep Pushdown', ['Lateral Raise', 'cable']],
+      ['Overhead Tricep Extension', ['Lateral Raise', 'dumbbell']],
     ],
   },
   {
@@ -470,7 +478,13 @@ export async function runSeed(): Promise<SeedSummary> {
       };
       scheduleSlots.push(scheduleSlot);
 
+      // Two maps so superset members can be addressed unambiguously even
+      // when the same family is listed twice in the same slot (Push days
+      // have both a cable and a dumbbell `Lateral Raise`). `planByFamily`
+      // serves the common single-occurrence case; `planByFamilyKind` is
+      // consulted when the seed spells a member as `[family, variantKind]`.
       const planByFamily = new Map<string, SlotPlan>();
+      const planByFamilyKind = new Map<string, SlotPlan>();
       slot.lifts.forEach((lift, lIdx) => {
         const family = families.get(lift.familyName);
         if (!family) throw new Error(`seed: family ${lift.familyName} missing in slot ${idx}`);
@@ -492,12 +506,19 @@ export async function runSeed(): Promise<SeedSummary> {
         };
         slotPlans.push(sp);
         planByFamily.set(lift.familyName, sp);
+        if (lift.variantKind) {
+          planByFamilyKind.set(`${lift.familyName}::${lift.variantKind}`, sp);
+        }
       });
 
       slot.supersets?.forEach((group, gIdx) => {
-        const slotPlanIds = group.map((fName) => {
-          const sp = planByFamily.get(fName);
-          if (!sp) throw new Error(`seed: superset references missing lift ${fName}`);
+        const slotPlanIds = group.map((m) => {
+          const sp = Array.isArray(m)
+            ? planByFamilyKind.get(`${m[0]}::${m[1]}`)
+            : planByFamily.get(m);
+          if (!sp) {
+            throw new Error(`seed: superset references missing lift ${JSON.stringify(m)}`);
+          }
           return sp.id;
         });
         supersetGroups.push({

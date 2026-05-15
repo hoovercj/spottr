@@ -1,10 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Spottr — otter spotter holding a fully loaded Olympic bar.
-       Plates follow the IWF bumper colors: green 10 kg outermost, then
-       yellow 15, blue 20, red 25 closest to the bar's center. Each
-       plate's vertical center is at y=372 so the stack sits level on
-       the bar (y=368, h=8 → center y=372). -->
-  <rect width="512" height="512" rx="96" fill="#0E0E10"/>
+  <!-- Spottr nav-bar logo — same otter + barbell as icon.svg, but with
+       a transparent background so it sits naturally inside the bottom
+       nav's paper surface. -->
 
   <!-- Head -->
   <circle cx="256" cy="216" r="124" fill="#3DDC84"/>
@@ -15,21 +12,21 @@
   <circle cx="168" cy="138" r="14" fill="#0E0E10"/>
   <circle cx="344" cy="138" r="14" fill="#0E0E10"/>
 
-  <!-- Eyes with a small highlight so it reads as "alert / spotting" -->
+  <!-- Eyes -->
   <circle cx="212" cy="208" r="15" fill="#0E0E10"/>
   <circle cx="300" cy="208" r="15" fill="#0E0E10"/>
   <circle cx="216" cy="204" r="4" fill="#3DDC84"/>
   <circle cx="304" cy="204" r="4" fill="#3DDC84"/>
 
-  <!-- Nose: small triangle -->
+  <!-- Nose -->
   <path d="M 244 252 L 268 252 L 256 268 Z" fill="#0E0E10"/>
 
-  <!-- Mouth: vertical philtrum + curved smile -->
+  <!-- Mouth -->
   <path d="M 256 268 L 256 282 M 232 288 Q 256 304 280 288"
         stroke="#0E0E10" stroke-width="5" fill="none"
         stroke-linecap="round" stroke-linejoin="round"/>
 
-  <!-- Whiskers, three pairs -->
+  <!-- Whiskers -->
   <g stroke="#0E0E10" stroke-width="4" stroke-linecap="round" fill="none">
     <line x1="152" y1="260" x2="206" y2="266"/>
     <line x1="152" y1="282" x2="206" y2="280"/>
@@ -37,11 +34,11 @@
     <line x1="306" y1="280" x2="360" y2="282"/>
   </g>
 
-  <!-- Paws gripping the bar — tucked tight under the head -->
+  <!-- Paws -->
   <circle cx="208" cy="372" r="28" fill="#3DDC84"/>
   <circle cx="304" cy="372" r="28" fill="#3DDC84"/>
 
-  <!-- Barbell: neutral steel sleeve -->
+  <!-- Barbell -->
   <rect x="70" y="368" width="372" height="8" rx="4" fill="#A8A8B0"/>
 
   <!-- Left plates: green (10) → yellow (15) → blue (20) → red (25) -->

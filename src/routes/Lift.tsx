@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link as RouterLink, useParams } from 'react-router-dom';
-import { Box, Button, Chip, Link, Stack, TextField, Typography } from '@mui/material';
-import { useActiveSession, useSessionLift } from '@/features/session/hooks';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { Box, Button, Chip, IconButton, Link, Stack, TextField, Typography } from '@mui/material';
+import LinkOffIcon from '@mui/icons-material/LinkOff';
+import { useActiveSession, useSessionLiftGroup } from '@/features/session/hooks';
 import {
   addSessionSet,
   deleteSessionSet,
@@ -10,7 +11,7 @@ import {
   setPlannedRowValues,
   unlogSet,
 } from '@/features/session/actions';
-import { changeSessionLiftVariant } from '@/features/session/amendments';
+import { changeSessionLiftVariant, dissolveSessionSuperset } from '@/features/session/amendments';
 import { setLiftNote } from '@/features/sundries/actions';
 import { SetTable, type SetRowView } from '@/components/SetTable';
 import { NumericKeypad, type KeypadVariant } from '@/components/NumericKeypad';
@@ -19,10 +20,11 @@ import { useVariantsForFamily } from '@/features/session/pickerData';
 import { computeSuggestion } from '@/features/suggested-weight/client';
 import type { Suggestion } from '@/features/suggested-weight/rule';
 import { fetchMatchedHistory } from '@/features/suggested-weight/queries';
-import { DEFAULT_INCREMENT, type SessionSet } from '@/data/types';
+import { DEFAULT_INCREMENT, type EquipmentKind, type SessionSet } from '@/data/types';
 import { useUserSettings } from '@/features/settings/hooks';
 import { useSessionMode } from '@/features/session/sessionHooks';
 import type { SessionMode } from '@/features/session/editStore';
+import type { SessionLiftDetail } from '@/features/session/hooks';
 
 /** Route element for /workout/lift/:liftId — active session, live mode. */
 export function Lift() {
@@ -63,7 +65,106 @@ interface LiftScreenProps {
 
 function LiftScreen({ sessionId, mode }: LiftScreenProps) {
   const params = useParams<{ liftId: string }>();
-  const detail = useSessionLift(sessionId, params.liftId);
+  const details = useSessionLiftGroup(sessionId, params.liftId);
+  const navigate = useNavigate();
+
+  if (details === undefined) {
+    return <LoadingShell />;
+  }
+  if (!details || details.length === 0) {
+    return <NoSessionFallback to={mode === 'live' ? '/' : `/session/${sessionId}`} />;
+  }
+
+  const isSuperset = details.length > 1;
+  const supersetGroupId = isSuperset ? details[0]!.sessionLift.supersetGroupId : null;
+  const backTo = mode === 'live' ? '/workout' : `/session/${sessionId}`;
+  const canUnlink = isSuperset && supersetGroupId && mode === 'live';
+
+  const onUnlink = () => {
+    if (!supersetGroupId) return;
+    void dissolveSessionSuperset({ sessionId, groupId: supersetGroupId }).then(() => {
+      // After dissolving, the requested lift becomes standalone — navigate
+      // to its own page so the screen no longer renders a group view.
+      if (params.liftId) {
+        const path =
+          mode === 'live'
+            ? `/workout/lift/${params.liftId}`
+            : `/session/${sessionId}/lift/${params.liftId}`;
+        void navigate(path, { replace: true });
+      }
+    });
+  };
+
+  return (
+    <Box
+      component="main"
+      sx={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', p: 3, gap: 2.5 }}
+    >
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ minHeight: 48 }}
+      >
+        <Link
+          component={RouterLink}
+          to={backTo}
+          underline="hover"
+          variant="body2"
+          aria-label="Back to workout"
+          sx={{
+            minHeight: 48,
+            display: 'inline-flex',
+            alignItems: 'center',
+            color: 'text.secondary',
+          }}
+        >
+          ← Workout
+        </Link>
+        {isSuperset && (
+          <Stack direction="row" alignItems="center" spacing={0.5}>
+            <Chip
+              label="Superset"
+              size="small"
+              sx={{
+                backgroundColor: 'var(--mui-palette-plateTint-blue)',
+                color: 'plates.blue',
+                fontWeight: 600,
+                letterSpacing: 0.5,
+                textTransform: 'uppercase',
+                borderRadius: 1,
+              }}
+            />
+            {canUnlink && (
+              <IconButton
+                aria-label="Unlink superset for this session"
+                size="small"
+                onClick={onUnlink}
+                sx={{ width: 32, height: 32, color: 'plates.blue' }}
+              >
+                <LinkOffIcon fontSize="small" />
+              </IconButton>
+            )}
+          </Stack>
+        )}
+      </Stack>
+
+      <Stack spacing={2.5}>
+        {details.map((d) => (
+          <LiftSection key={d.liftId} detail={d} mode={mode} inSuperset={isSuperset} />
+        ))}
+      </Stack>
+    </Box>
+  );
+}
+
+interface LiftSectionProps {
+  detail: SessionLiftDetail;
+  mode: SessionMode;
+  inSuperset: boolean;
+}
+
+function LiftSection({ detail, mode, inSuperset }: LiftSectionProps) {
   const [keypad, setKeypad] = useState<null | {
     rowId: string;
     variant: KeypadVariant;
@@ -76,16 +177,15 @@ function LiftScreen({ sessionId, mode }: LiftScreenProps) {
     newVariantId: string;
     loggedCount: number;
   } | null>(null);
-  const variants = useVariantsForFamily(detail?.sessionLift.liftFamilyId ?? null);
+  const variants = useVariantsForFamily(detail.sessionLift.liftFamilyId);
   const userSettings = useUserSettings();
 
-  const unitLabel = detail?.location?.units ?? userSettings?.units ?? 'lb';
+  const unitLabel = detail.location?.units ?? userSettings?.units ?? 'lb';
   const weightStep = DEFAULT_INCREMENT[unitLabel];
   const interactive = mode === 'live' || mode === 'edit';
   const structural = mode === 'live';
 
   useEffect(() => {
-    if (!detail) return;
     const firstSet = detail.sets[0];
     if (!firstSet) return;
     let cancelled = false;
@@ -112,18 +212,13 @@ function LiftScreen({ sessionId, mode }: LiftScreenProps) {
     };
   }, [detail, weightStep]);
 
-  if (detail === undefined) {
-    return <LoadingShell />;
-  }
-  if (!detail) {
-    return <NoSessionFallback to={mode === 'live' ? '/' : `/session/${sessionId}`} />;
-  }
-
   const rows: SetRowView[] = detail.sets.map((s) => ({
     id: s.id,
     setNumber: s.orderIndex + 1,
     plannedWeight: s.plannedWeight ?? suggestion?.weight ?? null,
     plannedReps: s.plannedReps,
+    plannedRepsMin: s.plannedRepsMin,
+    plannedRepsMax: s.plannedRepsMax,
     loggedWeight: s.loggedWeight ?? null,
     loggedReps: s.loggedReps ?? null,
     state: s.loggedAt ? 'logged' : 'unlogged',
@@ -169,7 +264,6 @@ function LiftScreen({ sessionId, mode }: LiftScreenProps) {
     if (mode === 'edit') {
       const row = detail.sets.find((s) => s.id === keypad.rowId);
       if (row?.loggedAt) {
-        // Editing a logged set in edit mode: update logged values directly.
         if (keypad.variant === 'weight') {
           void editLoggedSet({ sessionSetId: keypad.rowId, loggedWeight: value });
         } else {
@@ -179,7 +273,16 @@ function LiftScreen({ sessionId, mode }: LiftScreenProps) {
         return;
       }
     }
-    if (keypad.variant === 'weight') {
+    // Live mode: editing a logged set's weight should update the logged
+    // values (correction) rather than the plan — same intent as edit mode.
+    const row = detail.sets.find((s) => s.id === keypad.rowId);
+    if (row?.loggedAt) {
+      if (keypad.variant === 'weight') {
+        void editLoggedSet({ sessionSetId: keypad.rowId, loggedWeight: value });
+      } else {
+        void editLoggedSet({ sessionSetId: keypad.rowId, loggedReps: value });
+      }
+    } else if (keypad.variant === 'weight') {
       void setPlannedRowValues({ sessionSetId: keypad.rowId, plannedWeight: value });
     } else {
       void setPlannedRowValues({ sessionSetId: keypad.rowId, plannedReps: value });
@@ -200,32 +303,23 @@ function LiftScreen({ sessionId, mode }: LiftScreenProps) {
     }
   };
 
-  const backTo = mode === 'live' ? '/workout' : `/session/${sessionId}`;
-
   return (
     <Box
-      component="main"
-      sx={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', p: 3, gap: 3 }}
+      sx={{
+        backgroundColor: 'background.paper',
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1,
+        p: 2,
+        position: 'relative',
+        ...(inSuperset && {
+          borderLeft: '4px solid',
+          borderLeftColor: 'plates.blue',
+        }),
+      }}
     >
       <Stack spacing={0.5}>
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-          sx={{ minHeight: 48 }}
-        >
-          <Link
-            component={RouterLink}
-            to={backTo}
-            underline="hover"
-            variant="body2"
-            aria-label="Back to workout"
-            sx={{ minHeight: 48, display: 'inline-flex', alignItems: 'center' }}
-          >
-            ← Workout
-          </Link>
-        </Stack>
-        <Stack direction="row" spacing={1} alignItems="baseline">
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
           <Typography variant="h2">{detail.familyName}</Typography>
           {structural ? (
             <Chip
@@ -233,9 +327,14 @@ function LiftScreen({ sessionId, mode }: LiftScreenProps) {
               onClick={() => setVariantPickerOpen(true)}
               clickable
               size="small"
+              color={chipColorForEquipment(detail.equipmentKind)}
             />
           ) : (
-            <Chip label={detail.variantName} size="small" />
+            <Chip
+              label={detail.variantName}
+              size="small"
+              color={chipColorForEquipment(detail.equipmentKind)}
+            />
           )}
         </Stack>
         <Typography
@@ -256,49 +355,56 @@ function LiftScreen({ sessionId, mode }: LiftScreenProps) {
             {historyText ?? 'Loading history…'}
           </Typography>
         )}
-        {mode === 'live' && suggestion && (
+        {mode === 'live' && suggestion && suggestion.weight != null && (
           <Typography variant="body2" color="text.secondary">
-            {suggestion.weight != null
-              ? `Suggested ${suggestion.weight} ${unitLabel} — ${suggestion.reasoning}`
-              : suggestion.reasoning}
+            Suggested {suggestion.weight} {unitLabel} — {suggestion.reasoning}
           </Typography>
         )}
       </Stack>
 
-      <SetTable
-        rows={rows}
-        unitLabel={unitLabel}
-        readOnly={!interactive}
-        onToggleLog={onToggleLog}
-        onEditWeight={onEditWeight}
-        onEditReps={onEditReps}
-        onAdjustReps={onAdjustReps}
-        onDeleteRow={(id) => {
-          if (!structural) return;
-          void deleteSessionSet(id);
-        }}
-      />
+      <Box sx={{ mt: 2 }}>
+        <SetTable
+          rows={rows}
+          unitLabel={unitLabel}
+          readOnly={!interactive}
+          onToggleLog={onToggleLog}
+          onEditWeight={onEditWeight}
+          onEditReps={onEditReps}
+          onAdjustReps={onAdjustReps}
+          onDeleteRow={(id) => {
+            if (!structural) return;
+            void deleteSessionSet(id);
+          }}
+        />
+      </Box>
 
       {structural && (
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-          <Button variant="text" size="small" onClick={() => void addSessionSet(detail.liftId)}>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+          <Button
+            variant="text"
+            color="secondary"
+            size="small"
+            onClick={() => void addSessionSet(detail.liftId)}
+          >
             + Add set
           </Button>
         </Stack>
       )}
 
-      {interactive ? (
-        <InlineNoteEditor
-          initialValue={detail.sessionLift.note ?? ''}
-          onSave={(note) => void setLiftNote(detail.liftId, note)}
-        />
-      ) : detail.sessionLift.note ? (
-        <Box sx={{ borderLeft: '3px solid', borderColor: 'divider', pl: 1.5, py: 0.5 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
-            {detail.sessionLift.note}
-          </Typography>
-        </Box>
-      ) : null}
+      <Box sx={{ mt: 1.5 }}>
+        {interactive ? (
+          <InlineNoteEditor
+            initialValue={detail.sessionLift.note ?? ''}
+            onSave={(note) => void setLiftNote(detail.liftId, note)}
+          />
+        ) : detail.sessionLift.note ? (
+          <Box sx={{ borderLeft: '3px solid', borderColor: 'divider', pl: 1.5, py: 0.5 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+              {detail.sessionLift.note}
+            </Typography>
+          </Box>
+        ) : null}
+      </Box>
 
       <NumericKeypad
         open={keypad !== null}
@@ -486,6 +592,7 @@ function InlineNoteEditor({
     return (
       <Button
         variant="text"
+        color="secondary"
         size="small"
         onClick={() => setEditing(true)}
         sx={{ alignSelf: 'flex-start', ml: -1 }}
@@ -508,14 +615,14 @@ function InlineNoteEditor({
         width: '100%',
         boxSizing: 'border-box',
         borderLeft: '3px solid',
-        borderColor: 'primary.main',
-        backgroundColor: 'action.hover',
+        borderColor: 'warning.main',
+        backgroundColor: 'var(--mui-palette-plateTint-yellow)',
         borderRadius: 1,
         px: 1.5,
         py: 1,
         '&:focus-visible': {
           outline: '2px solid',
-          outlineColor: 'primary.main',
+          outlineColor: 'warning.main',
           outlineOffset: 2,
         },
       }}
@@ -530,6 +637,28 @@ function InlineNoteEditor({
       </Typography>
     </Box>
   );
+}
+
+// Variant-chip color follows the Olympic bumper-plate metaphor: barbell
+// (the headline gym tool) gets the 25 kg red, dumbbell the 20 kg blue,
+// machines the 15 kg yellow, cables the 10 kg green. The "exotic" kinds
+// (smith-machine, bodyweight, custom) stay neutral so users don't have
+// to memorize an over-large palette.
+function chipColorForEquipment(
+  kind: EquipmentKind | null,
+): 'default' | 'error' | 'secondary' | 'warning' | 'primary' {
+  switch (kind) {
+    case 'barbell':
+      return 'error';
+    case 'dumbbell':
+      return 'secondary';
+    case 'machine':
+      return 'warning';
+    case 'cable':
+      return 'primary';
+    default:
+      return 'default';
+  }
 }
 
 function formatHistoryLine(history: SessionSet[], range: { min: number; max: number }): string {

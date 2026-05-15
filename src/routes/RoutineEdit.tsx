@@ -38,18 +38,22 @@ import DeleteIcon from '@mui/icons-material/DeleteOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import { useProgramDetail } from '@/features/programs/detail';
+import LinkIcon from '@mui/icons-material/Link';
+import LinkOffIcon from '@mui/icons-material/LinkOff';
+import { useProgramDetail, type SlotPlanRow as SlotPlanRowType } from '@/features/programs/detail';
 import { useActiveProgram } from '@/features/programs/hooks';
 import {
   addProgramSlot,
   addSlotPlan,
   createProgram,
+  createSlotSupersetGroup,
   deleteProgram,
   deleteProgramSlot,
   duplicateProgram,
   duplicateProgramSlot,
   moveProgramSlot,
   removeSlotPlan,
+  removeSlotSupersetGroup,
   renameProgram,
   renameSplitDayType,
   restoreProgramSnapshot,
@@ -59,6 +63,7 @@ import {
   updateSlotPlanSets,
 } from '@/features/programs/actions';
 import { BottomListDrawer } from '@/components/BottomListDrawer';
+import { NewExerciseDialog } from '@/components/NewExerciseDialog';
 import { useLiftFamilies, useVariantsForFamily } from '@/features/session/pickerData';
 import type { PlannedSet } from '@/data/types';
 import { addDays, parseLocalDate, toLocalDateString } from '@/data/calendarDate';
@@ -271,7 +276,12 @@ function RoutineEditor({ detail }: RoutineEditorProps) {
         }}
       >
         <Box>
-          <Button size="small" variant="text" onClick={() => void navigate(-1)} sx={{ ml: -1 }}>
+          <Button
+            size="small"
+            variant="text"
+            onClick={() => void navigate(-1)}
+            sx={{ ml: -1, color: 'text.secondary' }}
+          >
             ← Back
           </Button>
         </Box>
@@ -349,9 +359,21 @@ function RoutineEditor({ detail }: RoutineEditorProps) {
               <ContentCopyIcon fontSize="small" />
             </IconButton>
             {isActive && (
-              <Typography variant="caption" color="primary.main" sx={{ ml: 'auto' }}>
-                active
-              </Typography>
+              <Box
+                sx={{
+                  ml: 'auto',
+                  px: 1,
+                  py: 0.25,
+                  borderRadius: 999,
+                  border: '1px solid',
+                  borderColor: 'primary.main',
+                  backgroundColor: 'var(--mui-palette-plateTint-green)',
+                }}
+              >
+                <Typography variant="caption" color="primary.main" sx={{ lineHeight: 1 }}>
+                  active
+                </Typography>
+              </Box>
             )}
           </Stack>
         )}
@@ -397,6 +419,7 @@ function RoutineEditor({ detail }: RoutineEditorProps) {
           ))}
           <Button
             variant="outlined"
+            color="secondary"
             onClick={() => void addProgramSlot(detail.program.id)}
             sx={{ alignSelf: 'flex-start' }}
           >
@@ -435,7 +458,11 @@ function RoutineEditor({ detail }: RoutineEditorProps) {
           Delete
         </Button>
         <Box sx={{ flex: 1 }} />
-        <Button variant="text" onClick={() => setDiscardConfirmOpen(true)}>
+        <Button
+          variant="text"
+          onClick={() => setDiscardConfirmOpen(true)}
+          sx={{ color: 'text.secondary' }}
+        >
           Discard
         </Button>
         <Button variant="contained" onClick={onSave}>
@@ -615,6 +642,49 @@ function SlotCard({
 }: SlotCardProps) {
   const [editingName, setEditingName] = useState(false);
   const [draft, setDraft] = useState(slot.splitDayType.name);
+  const [linkMode, setLinkMode] = useState(false);
+  const [linkSelection, setLinkSelection] = useState<Set<string>>(() => new Set());
+
+  const enterLinkMode = () => {
+    setLinkSelection(new Set());
+    setLinkMode(true);
+  };
+  const cancelLinkMode = () => {
+    setLinkSelection(new Set());
+    setLinkMode(false);
+  };
+  const toggleSelect = (slotPlanId: string) => {
+    setLinkSelection((cur) => {
+      const next = new Set(cur);
+      if (next.has(slotPlanId)) next.delete(slotPlanId);
+      else next.add(slotPlanId);
+      return next;
+    });
+  };
+  const saveLinkMode = () => {
+    const ids = Array.from(linkSelection);
+    if (ids.length >= 2) {
+      void createSlotSupersetGroup({
+        scheduleSlotId: slot.slot.id,
+        slotPlanIds: ids,
+      });
+    }
+    cancelLinkMode();
+  };
+
+  // Map slotPlanId → its superset group, used to render groups together and
+  // to skip plans already shown as part of an earlier-rendered group.
+  // Groups with fewer than 2 surviving members are filtered out so legacy
+  // / orphan rows don't render as a "superset of one".
+  const livePlanIds = new Set(slot.plans.map((p) => p.slotPlan.id));
+  const validGroups = slot.supersetGroups.filter(
+    (g) => g.slotPlanIds.filter((id) => livePlanIds.has(id)).length >= 2,
+  );
+  const groupByPlanId = new Map<string, (typeof validGroups)[number]>();
+  for (const g of validGroups) {
+    for (const id of g.slotPlanIds) groupByPlanId.set(id, g);
+  }
+  const renderedGroupIds = new Set<string>();
 
   return (
     <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
@@ -682,44 +752,82 @@ function SlotCard({
         />
       </Stack>
 
-      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1 }}>
-        <IconButton
-          aria-label="Move day up"
-          size="small"
-          onClick={onMoveUp}
-          disabled={!canMoveUp}
-          sx={{ width: 32, height: 32 }}
-        >
-          <ArrowUpwardIcon fontSize="small" />
-        </IconButton>
-        <IconButton
-          aria-label="Move day down"
-          size="small"
-          onClick={onMoveDown}
-          disabled={!canMoveDown}
-          sx={{ width: 32, height: 32 }}
-        >
-          <ArrowDownwardIcon fontSize="small" />
-        </IconButton>
-        <IconButton
-          aria-label="Duplicate day"
-          size="small"
-          onClick={onDuplicate}
-          sx={{ width: 32, height: 32 }}
-        >
-          <ContentCopyIcon fontSize="small" />
-        </IconButton>
-        <Box sx={{ flex: 1 }} />
-        <IconButton
-          aria-label="Delete day"
-          size="small"
-          onClick={onDelete}
-          disabled={!canDelete}
-          sx={{ width: 32, height: 32 }}
-        >
-          <DeleteIcon fontSize="small" />
-        </IconButton>
-      </Stack>
+      {linkMode ? (
+        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1 }}>
+          <Typography variant="caption" color="secondary.main" sx={{ flex: 1 }}>
+            Select exercises to link as a superset
+          </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            color="inherit"
+            startIcon={<CloseIcon fontSize="small" />}
+            onClick={cancelLinkMode}
+            sx={{ minHeight: 32, borderColor: 'divider', color: 'text.primary' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            size="small"
+            variant="contained"
+            color="secondary"
+            startIcon={<CheckIcon fontSize="small" />}
+            onClick={saveLinkMode}
+            disabled={linkSelection.size < 2}
+            sx={{ minHeight: 32 }}
+          >
+            Save
+          </Button>
+        </Stack>
+      ) : (
+        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1 }}>
+          <IconButton
+            aria-label="Move day up"
+            size="small"
+            onClick={onMoveUp}
+            disabled={!canMoveUp}
+            sx={{ width: 32, height: 32 }}
+          >
+            <ArrowUpwardIcon fontSize="small" />
+          </IconButton>
+          <IconButton
+            aria-label="Move day down"
+            size="small"
+            onClick={onMoveDown}
+            disabled={!canMoveDown}
+            sx={{ width: 32, height: 32 }}
+          >
+            <ArrowDownwardIcon fontSize="small" />
+          </IconButton>
+          <IconButton
+            aria-label="Duplicate day"
+            size="small"
+            onClick={onDuplicate}
+            sx={{ width: 32, height: 32 }}
+          >
+            <ContentCopyIcon fontSize="small" />
+          </IconButton>
+          <IconButton
+            aria-label="Link exercises into a superset"
+            size="small"
+            onClick={enterLinkMode}
+            disabled={slot.plans.length < 2 || slot.splitDayType.isRest}
+            sx={{ width: 32, height: 32, color: 'secondary.main' }}
+          >
+            <LinkIcon fontSize="small" />
+          </IconButton>
+          <Box sx={{ flex: 1 }} />
+          <IconButton
+            aria-label="Delete day"
+            size="small"
+            onClick={onDelete}
+            disabled={!canDelete}
+            sx={{ width: 32, height: 32 }}
+          >
+            <DeleteIcon fontSize="small" />
+          </IconButton>
+        </Stack>
+      )}
 
       {slot.splitDayType.isRest ? (
         <Typography variant="body2" color="text.secondary">
@@ -732,28 +840,143 @@ function SlotCard({
               No exercises yet.
             </Typography>
           )}
-          {slot.plans.map((plan) => (
-            <SlotPlanRow key={plan.slotPlan.id} row={plan} />
-          ))}
-          <Button
-            variant="text"
-            size="small"
-            onClick={onAddExercise}
-            sx={{ alignSelf: 'flex-start' }}
-          >
-            + Add exercise
-          </Button>
+          {slot.plans.map((plan) => {
+            // Link mode renders every plan flat with a selection checkbox.
+            if (linkMode) {
+              return (
+                <SlotPlanRow
+                  key={plan.slotPlan.id}
+                  row={plan}
+                  linkMode
+                  selected={linkSelection.has(plan.slotPlan.id)}
+                  onToggleSelect={() => toggleSelect(plan.slotPlan.id)}
+                />
+              );
+            }
+            // Normal mode: lifts in a superset render together as a single
+            // grouped card at the position of their earliest member.
+            const group = groupByPlanId.get(plan.slotPlan.id);
+            if (group) {
+              if (renderedGroupIds.has(group.id)) return null;
+              renderedGroupIds.add(group.id);
+              const memberIds = new Set(group.slotPlanIds);
+              const members = slot.plans.filter((p) => memberIds.has(p.slotPlan.id));
+              return (
+                <SupersetGroupCard
+                  key={group.id}
+                  groupId={group.id}
+                  members={members}
+                  onUnlink={() => void removeSlotSupersetGroup(group.id)}
+                />
+              );
+            }
+            return <SlotPlanRow key={plan.slotPlan.id} row={plan} />;
+          })}
+          {!linkMode && (
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              <Button
+                variant="text"
+                color="secondary"
+                size="small"
+                onClick={onAddExercise}
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                + Add exercise
+              </Button>
+              {slot.plans.length >= 2 && (
+                <Button
+                  variant="text"
+                  color="secondary"
+                  size="small"
+                  startIcon={<LinkIcon fontSize="small" />}
+                  onClick={enterLinkMode}
+                  sx={{ alignSelf: 'flex-start' }}
+                >
+                  Link supersets
+                </Button>
+              )}
+            </Stack>
+          )}
         </Stack>
       )}
     </Box>
   );
 }
 
-interface SlotPlanRowProps {
-  row: NonNullable<ReturnType<typeof useProgramDetail>>['slots'][number]['plans'][number];
+interface SupersetGroupCardProps {
+  groupId: string;
+  members: SlotPlanRowType[];
+  onUnlink: () => void;
 }
 
-function SlotPlanRow({ row }: SlotPlanRowProps) {
+function SupersetGroupCard({ members, onUnlink }: SupersetGroupCardProps) {
+  return (
+    <Box
+      sx={{
+        border: '1px solid',
+        borderColor: 'plates.blue',
+        borderLeft: '4px solid',
+        borderLeftColor: 'plates.blue',
+        backgroundColor: 'var(--mui-palette-plateTint-blue)',
+        borderRadius: 1,
+      }}
+    >
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{
+          px: 1.5,
+          py: 0.5,
+          borderBottom: '1px solid',
+          borderColor: 'plates.blue',
+        }}
+      >
+        <Typography
+          variant="caption"
+          color="plates.blue"
+          sx={{ fontWeight: 600, letterSpacing: 0.6, textTransform: 'uppercase' }}
+        >
+          Superset
+        </Typography>
+        <IconButton
+          aria-label="Unlink superset"
+          size="small"
+          onClick={onUnlink}
+          sx={{ width: 32, height: 32, color: 'plates.blue' }}
+        >
+          <LinkOffIcon fontSize="small" />
+        </IconButton>
+      </Stack>
+      {members.map((m, idx) => (
+        <Box
+          key={m.slotPlan.id}
+          sx={{
+            px: 1.5,
+            py: 1,
+            ...(idx > 0 && {
+              borderTop: '1px solid',
+              borderColor: 'var(--mui-palette-plates-blue)',
+            }),
+          }}
+        >
+          <SlotPlanRow row={m} dense />
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+interface SlotPlanRowProps {
+  row: SlotPlanRowType;
+  linkMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+  /** Drops own padding for use inside a grouped card. */
+  dense?: boolean;
+}
+
+function SlotPlanRow({ row, linkMode, selected, onToggleSelect, dense }: SlotPlanRowProps) {
   const [editing, setEditing] = useState(false);
   const setsCount = row.slotPlan.plannedSets.length;
   const firstSet = row.slotPlan.plannedSets[0];
@@ -765,7 +988,7 @@ function SlotPlanRow({ row }: SlotPlanRowProps) {
 
   return (
     <Box>
-      <Stack direction="row" alignItems="center" spacing={1}>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ py: dense ? 0 : 0.5 }}>
         <Stack sx={{ flex: 1 }}>
           <Typography variant="body2">{row.liftFamilyName}</Typography>
           <Typography variant="caption" color="text.secondary">
@@ -773,24 +996,37 @@ function SlotPlanRow({ row }: SlotPlanRowProps) {
             {row.variant ? ` · ${row.variant.name}` : ''}
           </Typography>
         </Stack>
-        <IconButton
-          aria-label="Edit scheme"
-          size="small"
-          onClick={() => setEditing((v) => !v)}
-          sx={{ width: 32, height: 32 }}
-        >
-          <EditIcon fontSize="small" />
-        </IconButton>
-        <IconButton
-          aria-label="Remove exercise"
-          size="small"
-          onClick={() => void removeSlotPlan(row.slotPlan.id)}
-          sx={{ width: 32, height: 32 }}
-        >
-          <DeleteIcon fontSize="small" />
-        </IconButton>
+        {linkMode ? (
+          <Checkbox
+            checked={!!selected}
+            onChange={onToggleSelect}
+            inputProps={{
+              'aria-label': `Select ${row.liftFamilyName} for superset`,
+            }}
+            sx={{ p: 0.5 }}
+          />
+        ) : (
+          <>
+            <IconButton
+              aria-label="Edit scheme"
+              size="small"
+              onClick={() => setEditing((v) => !v)}
+              sx={{ width: 32, height: 32 }}
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+            <IconButton
+              aria-label="Remove exercise"
+              size="small"
+              onClick={() => void removeSlotPlan(row.slotPlan.id)}
+              sx={{ width: 32, height: 32 }}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </>
+        )}
       </Stack>
-      {editing && (
+      {editing && !linkMode && (
         <SetSchemeEditor
           plannedSets={row.slotPlan.plannedSets}
           onSave={(sets) => {
@@ -896,8 +1132,12 @@ function AddExerciseFlow({ originSlotId, slots, onClose, onConfirm }: AddExercis
   const [variantId, setVariantId] = useState<string | null>(null);
   const [targetSlotIds, setTargetSlotIds] = useState<string[]>([]);
   const [filter, setFilter] = useState('');
+  const [builder, setBuilder] = useState<
+    { kind: 'family' } | { kind: 'variant'; liftFamilyId: string; familyName: string } | null
+  >(null);
   const families = useLiftFamilies();
   const variants = useVariantsForFamily(familyId);
+  const currentFamily = (families ?? []).find((f) => f.id === familyId);
 
   useEffect(() => {
     if (originSlotId === null) {
@@ -947,6 +1187,27 @@ function AddExerciseFlow({ originSlotId, slots, onClose, onConfirm }: AddExercis
             fullWidth
           />
           <Stack>
+            <Box
+              component="button"
+              type="button"
+              onClick={() => setBuilder({ kind: 'family' })}
+              sx={{
+                all: 'unset',
+                cursor: 'pointer',
+                py: 1.5,
+                px: 1,
+                borderTop: '1px solid',
+                borderColor: 'divider',
+                minHeight: 48,
+                display: 'flex',
+                alignItems: 'center',
+                color: 'secondary.main',
+              }}
+            >
+              <Typography variant="body1" sx={{ color: 'inherit' }}>
+                + Create new exercise
+              </Typography>
+            </Box>
             {filtered.map((f) => (
               <Box
                 key={f.id}
@@ -982,6 +1243,35 @@ function AddExerciseFlow({ originSlotId, slots, onClose, onConfirm }: AddExercis
         onClose={onClose}
       >
         <Stack>
+          {currentFamily && (
+            <Box
+              component="button"
+              type="button"
+              onClick={() =>
+                setBuilder({
+                  kind: 'variant',
+                  liftFamilyId: currentFamily.id,
+                  familyName: currentFamily.name,
+                })
+              }
+              sx={{
+                all: 'unset',
+                cursor: 'pointer',
+                py: 1.5,
+                px: 1,
+                borderTop: '1px solid',
+                borderColor: 'divider',
+                minHeight: 48,
+                display: 'flex',
+                alignItems: 'center',
+                color: 'secondary.main',
+              }}
+            >
+              <Typography variant="body1" sx={{ color: 'inherit' }}>
+                + New {currentFamily.name} variant
+              </Typography>
+            </Box>
+          )}
           {(variants ?? []).map((v) => (
             <Box
               key={v.variant.id}
@@ -1068,6 +1358,20 @@ function AddExerciseFlow({ originSlotId, slots, onClose, onConfirm }: AddExercis
           })}
         </Stack>
       </BottomListDrawer>
+
+      {builder && (
+        <NewExerciseDialog
+          open
+          mode={builder}
+          onCancel={() => setBuilder(null)}
+          onCreated={({ liftFamilyId, variantId: newVariantId }) => {
+            setBuilder(null);
+            setFamilyId(liftFamilyId);
+            setVariantId(newVariantId);
+            setStep('days');
+          }}
+        />
+      )}
     </>
   );
 }

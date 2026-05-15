@@ -19,18 +19,22 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import LinkOffIcon from '@mui/icons-material/LinkOff';
 import { useActiveSession, useSessionView } from '@/features/session/hooks';
 import { completeSession, discardSession } from '@/features/session/actions';
 import {
   addSessionLift,
+  dissolveSessionSuperset,
   removeSessionLift,
   validRemovalTiersForScope,
 } from '@/features/session/amendments';
 import type { SessionLift } from '@/data/types';
 import { BottomListDrawer } from '@/components/BottomListDrawer';
+import { NewExerciseDialog } from '@/components/NewExerciseDialog';
 import { ScopeModal, type Scope } from '@/components/ScopeModal';
 import { useLiftFamilies, useVariantsForFamily } from '@/features/session/pickerData';
 import { StretchCardioRow } from '@/components/StretchCardioRow';
+import { useCardioForSession, useStretchForSession } from '@/features/sundries/hooks';
 import { useSessionMode } from '@/features/session/sessionHooks';
 import { useSessionEditStore } from '@/features/session/editStore';
 import type { SessionMode } from '@/features/session/editStore';
@@ -74,6 +78,10 @@ function SessionWorkout({ sessionId, mode }: SessionWorkoutProps) {
   const navigate = useNavigate();
   const routerLocation = useLocation();
   const view = useSessionView(sessionId);
+  const stretch = useStretchForSession(sessionId);
+  const cardio = useCardioForSession(sessionId);
+  const stretchDone = stretch?.done ?? false;
+  const cardioLogged = cardio != null && !cardio.skipped;
   const enterEdit = useSessionEditStore((s) => s.enterEdit);
   const saveEdit = useSessionEditStore((s) => s.saveEdit);
   const discardEdit = useSessionEditStore((s) => s.discardEdit);
@@ -115,6 +123,10 @@ function SessionWorkout({ sessionId, mode }: SessionWorkoutProps) {
     (acc, l) => acc + l.sets.filter((s) => s.loggedAt).length,
     0,
   );
+  // Any logged set OR a completed stretch OR a non-skipped cardio entry
+  // counts as "progress" for the Complete button — a rest-day or warmup-
+  // only workout shouldn't be stuck on disabled.
+  const hasAnyProgress = loggedSetCount > 0 || (stretchDone ?? false) || (cardioLogged ?? false);
 
   const onRemoveLift = (lift: SessionLift) => {
     const tiers = validRemovalTiersForScope(lift.scope);
@@ -222,7 +234,7 @@ function SessionWorkout({ sessionId, mode }: SessionWorkoutProps) {
               size="small"
               variant="text"
               onClick={() => void navigate(origin)}
-              sx={{ ml: -1 }}
+              sx={{ ml: -1, color: 'text.secondary' }}
             >
               ← Back
             </Button>
@@ -257,6 +269,7 @@ function SessionWorkout({ sessionId, mode }: SessionWorkoutProps) {
         {mode === 'live' && (
           <Button
             variant="text"
+            color="secondary"
             onClick={() => setAddStep({ kind: 'family' })}
             sx={{ alignSelf: 'flex-start' }}
           >
@@ -308,7 +321,7 @@ function SessionWorkout({ sessionId, mode }: SessionWorkoutProps) {
             <Button
               variant="contained"
               onClick={() => void completeLive()}
-              disabled={busy || loggedSetCount === 0}
+              disabled={busy || !hasAnyProgress}
               sx={{ minHeight: 56, flex: 1 }}
             >
               Complete
@@ -465,89 +478,142 @@ function LiftList({ view, sessionId, showRemove, onRemoveLift }: LiftListProps) 
 
   return (
     <Stack spacing={1}>
-      {groups.map((g, gIdx) => (
-        <Box
-          key={g.supersetGroupId ?? `solo-${gIdx}`}
-          sx={
-            g.supersetGroupId
-              ? {
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  p: 1,
-                  position: 'relative',
-                }
-              : {}
-          }
-        >
-          {g.supersetGroupId && (
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ position: 'absolute', top: -10, left: 8, px: 1, bgcolor: 'background.default' }}
-            >
-              Superset
-            </Typography>
-          )}
-          {g.lifts.map((l) => {
-            const logged = l.sets.filter((s) => s.loggedAt).length;
-            const total = l.sets.length;
-            return (
-              <Box
-                key={l.lift.id}
+      {groups.map((g, gIdx) => {
+        const isSuperset = !!g.supersetGroupId;
+        // The whole superset routes to a single page that shows all of its
+        // lifts; tapping any constituent lift goes there.
+        const supersetLink = isSuperset
+          ? `/session/${sessionId}/lift/${g.lifts[0]!.lift.id}`
+          : null;
+        return (
+          <Box
+            key={g.supersetGroupId ?? `solo-${gIdx}`}
+            sx={
+              isSuperset
+                ? {
+                    border: '1px solid',
+                    borderColor: 'plates.blue',
+                    borderLeft: '4px solid',
+                    borderLeftColor: 'plates.blue',
+                    backgroundColor: 'var(--mui-palette-plateTint-blue)',
+                    borderRadius: 1,
+                  }
+                : {
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    backgroundColor: 'background.paper',
+                    borderRadius: 1,
+                  }
+            }
+          >
+            {isSuperset && (
+              <Stack
+                direction="row"
+                alignItems="center"
+                justifyContent="space-between"
                 sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  borderTop: '1px solid',
-                  borderColor: 'divider',
-                  minHeight: 56,
-                  '&:first-of-type': { borderTop: 'none' },
+                  px: 1.5,
+                  py: 0.25,
+                  minHeight: 36,
+                  borderBottom: '1px solid',
+                  borderColor: 'plates.blue',
                 }}
               >
-                <Box
-                  component={RouterLink}
-                  to={`/session/${sessionId}/lift/${l.lift.id}`}
+                <Typography
+                  variant="caption"
+                  color="plates.blue"
                   sx={{
-                    flex: 1,
-                    py: 1.5,
-                    px: 1,
-                    color: 'inherit',
-                    textDecoration: 'none',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    minHeight: 56,
+                    fontWeight: 600,
+                    letterSpacing: 0.6,
+                    textTransform: 'uppercase',
                   }}
                 >
-                  <Stack>
-                    <Typography variant="body1">{l.familyName}</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {l.variant?.name ?? ''} · {total} sets
-                    </Typography>
-                  </Stack>
-                  <Typography
-                    variant="body2"
-                    color={logged === total ? 'primary.main' : 'text.secondary'}
-                    className="numeric-cell"
-                  >
-                    {logged}/{total}
-                  </Typography>
-                </Box>
-                {showRemove && (
+                  Superset
+                </Typography>
+                {showRemove && g.supersetGroupId && (
                   <IconButton
                     size="small"
-                    onClick={() => onRemoveLift(l.lift)}
-                    aria-label={`Remove ${l.familyName}`}
-                    sx={{ width: 40, height: 40, ml: 0.5, color: 'text.secondary' }}
+                    aria-label="Unlink superset for this session"
+                    onClick={() =>
+                      void dissolveSessionSuperset({
+                        sessionId,
+                        groupId: g.supersetGroupId!,
+                      })
+                    }
+                    sx={{ width: 28, height: 28, color: 'plates.blue' }}
                   >
-                    ✕
+                    <LinkOffIcon fontSize="small" />
                   </IconButton>
                 )}
-              </Box>
-            );
-          })}
-        </Box>
-      ))}
+              </Stack>
+            )}
+            {g.lifts.map((l, liftIdx) => {
+              const logged = l.sets.filter((s) => s.loggedAt).length;
+              const total = l.sets.length;
+              const counterColor =
+                logged === 0 ? 'text.secondary' : logged < total ? 'warning.main' : 'primary.main';
+              const liftHref = isSuperset
+                ? (supersetLink as string)
+                : `/session/${sessionId}/lift/${l.lift.id}`;
+              return (
+                <Box
+                  key={l.lift.id}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    minHeight: 56,
+                    ...(liftIdx > 0 && {
+                      borderTop: '1px solid',
+                      borderColor: isSuperset ? 'var(--mui-palette-plates-blue)' : 'divider',
+                    }),
+                  }}
+                >
+                  <Box
+                    component={RouterLink}
+                    to={liftHref}
+                    sx={{
+                      flex: 1,
+                      py: 1.5,
+                      px: 1.5,
+                      color: 'inherit',
+                      textDecoration: 'none',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      minHeight: 56,
+                    }}
+                  >
+                    <Stack>
+                      <Typography variant="body1">{l.familyName}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {l.variant?.name ?? ''} · {total} sets
+                      </Typography>
+                    </Stack>
+                    <Typography
+                      variant="body2"
+                      color={counterColor}
+                      className="numeric-cell"
+                      sx={{ fontWeight: logged > 0 ? 600 : 400 }}
+                    >
+                      {logged}/{total}
+                    </Typography>
+                  </Box>
+                  {showRemove && (
+                    <IconButton
+                      size="small"
+                      onClick={() => onRemoveLift(l.lift)}
+                      aria-label={`Remove ${l.familyName}`}
+                      sx={{ width: 40, height: 40, mr: 0.5, color: 'text.secondary' }}
+                    >
+                      ✕
+                    </IconButton>
+                  )}
+                </Box>
+              );
+            })}
+          </Box>
+        );
+      })}
     </Stack>
   );
 }
@@ -570,6 +636,9 @@ function AddLiftFlow({ sessionId, step, setStep }: AddLiftFlowProps) {
     step.kind === 'variant' || step.kind === 'scope' ? step.liftFamilyId : null;
   const variants = useVariantsForFamily(variantStepFamilyId);
   const [filter, setFilter] = useState('');
+  const [builder, setBuilder] = useState<
+    { kind: 'family' } | { kind: 'variant'; liftFamilyId: string; familyName: string } | null
+  >(null);
 
   // Reset filter when (re)entering the family step.
   useEffect(() => {
@@ -605,6 +674,11 @@ function AddLiftFlow({ sessionId, step, setStep }: AddLiftFlowProps) {
     f.name.toLowerCase().includes(filter.trim().toLowerCase()),
   );
 
+  const currentFamily =
+    step.kind === 'variant' || step.kind === 'scope'
+      ? (families ?? []).find((f) => f.id === step.liftFamilyId)
+      : null;
+
   return (
     <>
       <BottomListDrawer open={step.kind === 'family'} title="Add exercise" onClose={close}>
@@ -619,6 +693,11 @@ function AddLiftFlow({ sessionId, step, setStep }: AddLiftFlowProps) {
             slotProps={{ htmlInput: { 'aria-label': 'Search exercises' } }}
           />
           <Stack>
+            <PickerRow
+              label="+ Create new exercise"
+              accent="secondary"
+              onClick={() => setBuilder({ kind: 'family' })}
+            />
             {filteredFamilies.map((f) => (
               <PickerRow
                 key={f.id}
@@ -642,6 +721,19 @@ function AddLiftFlow({ sessionId, step, setStep }: AddLiftFlowProps) {
         onClose={close}
       >
         <Stack>
+          {currentFamily && (
+            <PickerRow
+              label={`+ New ${currentFamily.name} variant`}
+              accent="secondary"
+              onClick={() =>
+                setBuilder({
+                  kind: 'variant',
+                  liftFamilyId: currentFamily.id,
+                  familyName: currentFamily.name,
+                })
+              }
+            />
+          )}
           {(variants ?? []).map((v) => (
             <PickerRow
               key={v.variant.id}
@@ -671,6 +763,18 @@ function AddLiftFlow({ sessionId, step, setStep }: AddLiftFlowProps) {
         }}
         onConfirm={confirm}
       />
+
+      {builder && (
+        <NewExerciseDialog
+          open
+          mode={builder}
+          onCancel={() => setBuilder(null)}
+          onCreated={({ liftFamilyId, variantId }) => {
+            setBuilder(null);
+            setStep({ kind: 'scope', liftFamilyId, variantId });
+          }}
+        />
+      )}
     </>
   );
 }
@@ -678,9 +782,12 @@ function AddLiftFlow({ sessionId, step, setStep }: AddLiftFlowProps) {
 interface PickerRowProps {
   label: string;
   onClick: () => void;
+  /** Optional accent — used to make "+ Create new exercise" stand out. */
+  accent?: 'secondary';
 }
 
-function PickerRow({ label, onClick }: PickerRowProps) {
+function PickerRow({ label, onClick, accent }: PickerRowProps) {
+  const accentColor = accent === 'secondary' ? 'secondary.main' : 'inherit';
   return (
     <Box
       component="button"
@@ -693,18 +800,20 @@ function PickerRow({ label, onClick }: PickerRowProps) {
         px: 1,
         borderTop: '1px solid',
         borderColor: 'divider',
-        color: 'inherit',
+        color: accentColor,
         display: 'flex',
         alignItems: 'center',
         minHeight: 56,
         '&:focus-visible': {
           outline: '2px solid',
-          outlineColor: 'primary.main',
+          outlineColor: accent === 'secondary' ? 'secondary.main' : 'primary.main',
           outlineOffset: 2,
         },
       }}
     >
-      <Typography variant="body1">{label}</Typography>
+      <Typography variant="body1" sx={{ color: 'inherit' }}>
+        {label}
+      </Typography>
     </Box>
   );
 }

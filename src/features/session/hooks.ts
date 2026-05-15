@@ -12,7 +12,14 @@ import {
   type SessionView,
   type PlannedSlotView,
 } from '@/features/session/queries';
-import type { ScheduleSlot, Session, SessionSet, SplitDayType, Location } from '@/data/types';
+import type {
+  EquipmentKind,
+  ScheduleSlot,
+  Session,
+  SessionSet,
+  SplitDayType,
+  Location,
+} from '@/data/types';
 
 export function useActiveSession(): Session | null | undefined {
   return useLiveQuery(() => getActiveSession(), []);
@@ -89,6 +96,7 @@ export interface SessionLiftDetail {
   familyName: string;
   variantName: string;
   variantId: string;
+  equipmentKind: EquipmentKind | null;
   sessionLift: NonNullable<SessionView['lifts'][number]['lift']>;
   sets: SessionSet[];
   splitDayType: SplitDayType | null;
@@ -105,17 +113,46 @@ export function useSessionLift(
     if (!view) return null;
     const found = view.lifts.find((l) => l.lift.id === liftId);
     if (!found) return null;
-    return {
-      liftId,
-      familyName: found.familyName,
-      variantName: found.variant?.name ?? '(unknown)',
-      variantId: found.lift.variantId,
-      sessionLift: found.lift,
-      sets: found.sets,
-      splitDayType: view.splitDayType,
-      location: view.location,
-    };
+    return liftDetailFromView(view, found);
   }, [sessionId, liftId]);
+}
+
+/**
+ * Returns every lift in the requested lift's superset group (in session
+ * order). If the lift is not part of a superset, returns just that one.
+ * The Lift screen uses this to render an entire superset on one page.
+ */
+export function useSessionLiftGroup(
+  sessionId: string | null | undefined,
+  liftId: string | null | undefined,
+): SessionLiftDetail[] | null | undefined {
+  return useLiveQuery(async () => {
+    if (!sessionId || !liftId) return null;
+    const view = await getSessionView(sessionId);
+    if (!view) return null;
+    const found = view.lifts.find((l) => l.lift.id === liftId);
+    if (!found) return null;
+    const groupId = found.lift.supersetGroupId;
+    const lifts = groupId ? view.lifts.filter((l) => l.lift.supersetGroupId === groupId) : [found];
+    return lifts.map((l) => liftDetailFromView(view, l));
+  }, [sessionId, liftId]);
+}
+
+function liftDetailFromView(
+  view: NonNullable<Awaited<ReturnType<typeof getSessionView>>>,
+  found: NonNullable<Awaited<ReturnType<typeof getSessionView>>>['lifts'][number],
+): SessionLiftDetail {
+  return {
+    liftId: found.lift.id,
+    familyName: found.familyName,
+    variantName: found.variant?.name ?? '(unknown)',
+    variantId: found.lift.variantId,
+    equipmentKind: found.variant?.equipmentKind ?? null,
+    sessionLift: found.lift,
+    sets: found.sets,
+    splitDayType: view.splitDayType,
+    location: view.location,
+  };
 }
 
 export function useDefaultLocation(): Location | null | undefined {
