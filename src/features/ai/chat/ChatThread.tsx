@@ -8,11 +8,8 @@
  */
 
 import { useEffect } from 'react';
-import {
-  AssistantRuntimeProvider,
-  ThreadPrimitive,
-} from '@assistant-ui/react';
-import { Alert, Box, Button, Chip, Fab, Stack, Typography } from '@mui/material';
+import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react';
+import { Box, Button, Chip, IconButton, Stack, Typography } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { useChatRuntime } from '@/features/ai/chat/useChatRuntime';
@@ -39,11 +36,14 @@ export function ChatThread({
 
   useEffect(() => {
     if (!onSessionReady) return;
+    // Wrap session.reset so the API surfaces a stable, this-free callable
+    // — keeps ESLint's `unbound-method` happy and avoids the trap of
+    // someone later assuming the reference is bound to a class instance.
     onSessionReady({
-      reset: session.reset,
+      reset: () => session.reset(),
       isEmpty: session.state.messages.length === 0,
     });
-  }, [onSessionReady, session.reset, session.state.messages.length]);
+  }, [onSessionReady, session, session.state.messages.length]);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
@@ -65,10 +65,7 @@ export function ChatThread({
               flexDirection: 'column',
             }}
           >
-            <ThreadPrimitive.Viewport
-              asChild
-              autoScroll
-            >
+            <ThreadPrimitive.Viewport asChild autoScroll>
               <Box
                 sx={{
                   flex: 1,
@@ -94,28 +91,32 @@ export function ChatThread({
             <SuggestionChips />
 
             {session.state.error && (
-              <Box sx={{ px: 2, py: 1 }}>
-                <Alert severity="warning" variant="outlined">
-                  {session.state.error}
-                  {session.state.error.includes('No AI provider configured') && (
-                    <Box sx={{ mt: 1 }}>
-                      <Button
-                        component={RouterLink}
-                        to="/settings"
-                        size="small"
-                        variant="outlined"
-                      >
-                        Open Settings
-                      </Button>
-                    </Box>
-                  )}
-                </Alert>
+              <Box
+                role="alert"
+                sx={{
+                  mx: 2,
+                  my: 1,
+                  px: 1.5,
+                  py: 1,
+                  borderLeft: '3px solid',
+                  borderColor: 'warning.main',
+                  bgcolor: 'action.hover',
+                  borderRadius: 1,
+                }}
+              >
+                <Typography variant="body2">{session.state.error}</Typography>
+                {session.state.error.includes('No AI provider configured') && (
+                  <Box sx={{ mt: 1 }}>
+                    <Button component={RouterLink} to="/settings" size="small" variant="outlined">
+                      Open Settings
+                    </Button>
+                  </Box>
+                )}
               </Box>
             )}
 
             <ThreadPrimitive.ScrollToBottom asChild>
-              <Fab
-                color="default"
+              <IconButton
                 size="small"
                 aria-label="Jump to latest"
                 sx={{
@@ -124,10 +125,14 @@ export function ChatThread({
                   bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)',
                   right: 16,
                   zIndex: 1,
+                  bgcolor: 'background.paper',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  '&:hover': { bgcolor: 'action.hover' },
                 }}
               >
-                <KeyboardArrowDownIcon />
-              </Fab>
+                <KeyboardArrowDownIcon fontSize="small" />
+              </IconButton>
             </ThreadPrimitive.ScrollToBottom>
 
             <ComposerView />

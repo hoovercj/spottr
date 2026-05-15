@@ -39,9 +39,7 @@ describe('chatStore persistence', () => {
 
   it('persists messages on change after hydration', async () => {
     await useChatStore.getState().hydrate();
-    const messages: AIMessage[] = [
-      { id: 'u1', role: 'user', content: 'first turn' },
-    ];
+    const messages: AIMessage[] = [{ id: 'u1', role: 'user', content: 'first turn' }];
     useChatStore.setState({ messages });
     // The persistence subscriber debounces; flush it explicitly.
     await _flushChatStorePersistForTest();

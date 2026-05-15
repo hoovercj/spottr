@@ -10,7 +10,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   Box,
   Button,
   IconButton,
@@ -89,7 +88,8 @@ export function AISettingsPanel() {
       if (!text) {
         setStatus({
           kind: 'error',
-          message: 'Empty response from Gemini — the key probably works but the model returned nothing.',
+          message:
+            'Empty response from Gemini — the key probably works but the model returned nothing.',
         });
         return;
       }
@@ -111,17 +111,29 @@ export function AISettingsPanel() {
         .
       </Typography>
 
-      <Alert severity="info" variant="outlined">
-        Your key is stored on this device only. It never syncs to Drive and is never included in
-        export payloads. Anyone with access to this device's browser data can read it.
-      </Alert>
+      <Box
+        sx={{
+          border: '1px solid',
+          borderColor: 'divider',
+          backgroundColor: 'action.hover',
+          borderRadius: 1,
+          p: 1.5,
+        }}
+      >
+        <Typography variant="body2" color="text.secondary">
+          Your key is stored on this device only. It never syncs to Drive and is never included in
+          export payloads. Anyone with access to this device's browser data can read it.
+        </Typography>
+      </Box>
 
       <Stack spacing={1}>
         <TextField
           label="Gemini API key"
           value={draftKey}
           onChange={(e) => setDraftKey(e.target.value)}
-          placeholder={storedKey ? `(saved — ${storedKey.slice(0, 4)}…${storedKey.slice(-4)})` : 'AIza…'}
+          placeholder={
+            storedKey ? `(saved — ${storedKey.slice(0, 4)}…${storedKey.slice(-4)})` : 'AIza…'
+          }
           type={reveal ? 'text' : 'password'}
           fullWidth
           autoComplete="off"
@@ -171,14 +183,32 @@ export function AISettingsPanel() {
         </Typography>
       )}
       {status.kind === 'ok' && (
-        <Alert severity="success" variant="outlined">
-          Connected — model {status.model} responded.
-        </Alert>
+        <Box
+          role="status"
+          sx={{
+            border: '1px solid',
+            borderColor: 'primary.main',
+            backgroundColor: 'var(--mui-palette-plateTint-green)',
+            borderRadius: 1,
+            p: 1.5,
+          }}
+        >
+          <Typography variant="body2">Connected — model {status.model} responded.</Typography>
+        </Box>
       )}
       {status.kind === 'error' && (
-        <Alert severity="error" variant="outlined">
-          {status.message}
-        </Alert>
+        <Box
+          role="alert"
+          sx={{
+            border: '1px solid',
+            borderColor: 'error.main',
+            backgroundColor: 'var(--mui-palette-plateTint-red)',
+            borderRadius: 1,
+            p: 1.5,
+          }}
+        >
+          <Typography variant="body2">{status.message}</Typography>
+        </Box>
       )}
 
       <UserProfileForm />

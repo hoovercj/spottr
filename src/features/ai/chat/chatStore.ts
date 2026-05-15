@@ -104,7 +104,7 @@ export const useChatStore = create<State & Actions>((set, get) => ({
     }
     // Refresh profile + active program every send so a Settings edit
     // takes effect immediately on the next message (both reads are cheap
-     // and ride on Dexie's in-memory cache).
+    // and ride on Dexie's in-memory cache).
     const [profile, activeProgramName] = await Promise.all([
       getUserProfile(),
       fetchActiveProgramName(),

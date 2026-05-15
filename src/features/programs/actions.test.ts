@@ -80,10 +80,7 @@ describe('program actions', () => {
     });
     expect(result).not.toBeNull();
 
-    const groups = await db.slotPlanSupersetGroup
-      .where('scheduleSlotId')
-      .equals(slotId!)
-      .toArray();
+    const groups = await db.slotPlanSupersetGroup.where('scheduleSlotId').equals(slotId!).toArray();
     const created = groups.find((g) => g.id === result!.groupId)!;
     expect(created.slotPlanIds).toEqual(planIds);
   });

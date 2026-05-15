@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useState } from 'react';
-import { Box, Dialog, IconButton, Tooltip, Typography } from '@mui/material';
+import { Box, Dialog, IconButton, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { ChatThread } from '@/features/ai/chat/ChatThread';
@@ -70,24 +70,18 @@ export function ChatDialog({ open, onClose }: ChatDialogProps) {
         <Typography variant="h6" sx={{ flex: 1 }}>
           Coach
         </Typography>
-        <Tooltip title="New conversation">
-          <span>
-            <IconButton
-              aria-label="New conversation"
-              onClick={() => {
-                void api?.reset();
-              }}
-              disabled={!api || api.isEmpty}
-            >
-              <RestartAltIcon />
-            </IconButton>
-          </span>
-        </Tooltip>
-        <Tooltip title="Close">
-          <IconButton aria-label="Close" onClick={onClose}>
-            <CloseIcon />
-          </IconButton>
-        </Tooltip>
+        <IconButton
+          aria-label="New conversation"
+          onClick={() => {
+            void api?.reset();
+          }}
+          disabled={!api || api.isEmpty}
+        >
+          <RestartAltIcon />
+        </IconButton>
+        <IconButton aria-label="Close" onClick={onClose}>
+          <CloseIcon />
+        </IconButton>
       </Box>
 
       <ChatThread onSessionReady={onReady} />

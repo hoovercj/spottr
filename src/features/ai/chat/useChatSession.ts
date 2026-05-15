@@ -9,7 +9,7 @@
  * decide direct store access is cleaner.
  */
 
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useChatStore } from '@/features/ai/chat/chatStore';
 import type { AIMessage } from '@/features/ai/providers/types';
 
@@ -32,9 +32,14 @@ export function useChatSession(): UseChatSession {
   const messages = useChatStore((s) => s.messages);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const error = useChatStore((s) => s.error);
-  const send = useChatStore((s) => s.send);
-  const cancel = useChatStore((s) => s.cancel);
-  const reset = useChatStore((s) => s.reset);
+
+  // The store's actions are plain closures — not class methods — but
+  // ESLint's `unbound-method` flags them anyway because they're
+  // extracted as property references. Wrap them in stable callbacks
+  // so consumers receive `this`-free callables.
+  const send = useCallback((text: string): Promise<void> => useChatStore.getState().send(text), []);
+  const cancel = useCallback((): void => useChatStore.getState().cancel(), []);
+  const reset = useCallback((): Promise<void> => useChatStore.getState().reset(), []);
 
   // Lazy-hydrate the first time anyone reads the session. Idempotent;
   // subsequent calls short-circuit on the store's `isHydrated` flag.

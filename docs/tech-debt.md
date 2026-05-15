@@ -19,7 +19,7 @@ they're worth knocking down opportunistically.
     `removeSlotPlan` cascade (drops single-survivor group; trims 3 → 2),
     `removeSlotSupersetGroup`, `addSlotPlan` ordering.
   - `src/features/library/actions.test.ts` — `createCustomExercise` (default
-    + explicit `isFreeWeight`), trim/empty validation, `createCustomVariant`.
+    - explicit `isFreeWeight`), trim/empty validation, `createCustomVariant`.
   - `src/features/sundries/actions.test.ts` — `toggleStretch` (single row /
     update), `setCardio` (idempotent per session), `setLiftNote` (clear on
     empty).
@@ -52,14 +52,14 @@ they're worth knocking down opportunistically.
 These targets exist as design intent but have not been validated on the
 target device:
 
-| NFR | Target | Status |
-|---|---|---|
-| NFR1 | Cold start <1.5s offline | Unmeasured |
+| NFR  | Target                               | Status     |
+| ---- | ------------------------------------ | ---------- |
+| NFR1 | Cold start <1.5s offline             | Unmeasured |
 | NFR2 | Lift-screen tap-to-render <100ms p95 | Unmeasured |
-| NFR3 | Set-entry commit <100ms p95 | Unmeasured |
-| NFR4 | History query <200ms p95 @ ~6k sets | Unmeasured |
-| NFR5 | Suggested-weight <50ms from paint | Unmeasured |
-| NFR6 | Auto-export <10s typical mobile | Unmeasured |
+| NFR3 | Set-entry commit <100ms p95          | Unmeasured |
+| NFR4 | History query <200ms p95 @ ~6k sets  | Unmeasured |
+| NFR5 | Suggested-weight <50ms from paint    | Unmeasured |
+| NFR6 | Auto-export <10s typical mobile      | Unmeasured |
 
 Easiest path: one Lighthouse run + one manual session on the Pixel 7 Pro
 with `performance.mark` already in place (search the codebase). If any of
@@ -124,14 +124,14 @@ filter predicate.
 These FRs are partially implemented per the PRD; functional today but with
 rough edges.
 
-| FR | Gap |
-|---|---|
-| FR7 | Re-tag historical sets to a different variant — schema supports, no UI surface |
-| FR15 | Scope-conflict warning (narrower scope shadows broader) — UI may not be wired |
-| FR28 | Reattribute already-logged sets on variant change — confirm UI exists; behavior under "Move them" needs a real-workout test |
+| FR   | Gap                                                                                                                                                  |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR7  | Re-tag historical sets to a different variant — schema supports, no UI surface                                                                       |
+| FR15 | Scope-conflict warning (narrower scope shadows broader) — UI may not be wired                                                                        |
+| FR28 | Reattribute already-logged sets on variant change — confirm UI exists; behavior under "Move them" needs a real-workout test                          |
 | FR32 | Ad-hoc superset on the fly during a workout — schema tracks `locationSupersetMemory`; in-session pairing UI is best-effort, may not handle all flows |
-| FR37 | Mark cardio "skipped today" — schema supports it, no clear UI affordance |
-| FR43 | Single-session full record view (`SessionSummary`) — verify cardio / stretch / notes / location all render on a real completed session |
+| FR37 | Mark cardio "skipped today" — schema supports it, no clear UI affordance                                                                             |
+| FR43 | Single-session full record view (`SessionSummary`) — verify cardio / stretch / notes / location all render on a real completed session               |
 
 ## 🌱 Growth backlog (PRD §Phase 2 — explicitly deferred)
 

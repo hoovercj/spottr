@@ -46,13 +46,7 @@ export function ToolCallView({
       : running
         ? 'text.secondary'
         : 'text.secondary';
-  const pillLabel = errored
-    ? 'error'
-    : running
-      ? 'running…'
-      : done
-        ? 'done'
-        : 'pending';
+  const pillLabel = errored ? 'error' : running ? 'running…' : done ? 'done' : 'pending';
 
   return (
     <Accordion
@@ -74,10 +68,7 @@ export function ToolCallView({
         sx={{ minHeight: 40, '& .MuiAccordionSummary-content': { my: 0.5 } }}
       >
         <Stack direction="row" spacing={1} alignItems="center" sx={{ flex: 1 }}>
-          <Typography
-            component="span"
-            sx={{ fontFamily: 'monospace', fontSize: '0.85em' }}
-          >
+          <Typography component="span" sx={{ fontFamily: 'monospace', fontSize: '0.85em' }}>
             {toolName}
           </Typography>
           <Typography

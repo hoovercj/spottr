@@ -42,7 +42,7 @@ interface ChartableBucketOut {
 const listChartableBuckets: ToolSpec<Record<string, never>, { buckets: ChartableBucketOut[] }> = {
   name: 'list_chartable_buckets',
   description:
-    'Enumerate every (variant, planned rep range) bucket that has at least one logged set. Use when: starting any question about a specific lift — call this first to discover the variantId values and rep ranges that actually exist in the user\'s history. Don\'t use: for trend data — that\'s get_progress_series. Returns `{ buckets: Array<{ variantId, variantName, liftFamilyId, liftFamilyName, plannedRepsMin, plannedRepsMax, isBodyweight }> }`.',
+    "Enumerate every (variant, planned rep range) bucket that has at least one logged set. Use when: starting any question about a specific lift — call this first to discover the variantId values and rep ranges that actually exist in the user's history. Don't use: for trend data — that's get_progress_series. Returns `{ buckets: Array<{ variantId, variantName, liftFamilyId, liftFamilyName, plannedRepsMin, plannedRepsMax, isBodyweight }> }`.",
   mutates: false,
   risk: 'read',
   jsonSchema: { type: 'object', properties: {}, additionalProperties: false },
@@ -139,9 +139,7 @@ async function summarizeSession(session: Session): Promise<RecentSessionOut> {
     locationName: location?.name ?? '—',
     loggedSets: logged,
     plannedSets: planned,
-    liftFamilies: families
-      .filter((f): f is NonNullable<typeof f> => Boolean(f))
-      .map((f) => f.name),
+    liftFamilies: families.filter((f): f is NonNullable<typeof f> => Boolean(f)).map((f) => f.name),
   };
 }
 
@@ -262,7 +260,7 @@ interface VariantHistoryOut {
 const getVariantHistory: ToolSpec<VariantHistoryArgs, VariantHistoryOut | { error: string }> = {
   name: 'get_variant_history',
   description:
-    'Every logged set for a given variant, newest first — full per-set detail (not just the top set). Use when: the user wants to see all reps/weights for a lift, or when comparing technique drift across sets. Don\'t use: for "what\'s my PR" — that\'s get_prs. For trend lines — that\'s get_progress_series. Returns `{ variantName, liftFamilyName, units, history: [{ sessionId, date, workoutName, sets: [{ loggedWeight, loggedReps, plannedRange }] }] }`. Filter by passing both `plannedRepsMin` and `plannedRepsMax` together, and/or `sinceDate`.',
+    "Every logged set for a given variant, newest first — full per-set detail (not just the top set). Use when: the user wants to see all reps/weights for a lift, or when comparing technique drift across sets. Don't use: for \"what's my PR\" — that's get_prs. For trend lines — that's get_progress_series. Returns `{ variantName, liftFamilyName, units, history: [{ sessionId, date, workoutName, sets: [{ loggedWeight, loggedReps, plannedRange }] }] }`. Filter by passing both `plannedRepsMin` and `plannedRepsMax` together, and/or `sinceDate`.",
   mutates: false,
   risk: 'read',
   jsonSchema: {
@@ -298,8 +296,7 @@ const getVariantHistory: ToolSpec<VariantHistoryArgs, VariantHistoryOut | { erro
       const setsFiltered = wantRange
         ? setsRaw.filter(
             (s) =>
-              s.plannedRepsMin === args.plannedRepsMin &&
-              s.plannedRepsMax === args.plannedRepsMax,
+              s.plannedRepsMin === args.plannedRepsMin && s.plannedRepsMax === args.plannedRepsMax,
           )
         : setsRaw;
       if (setsFiltered.length === 0) continue;
@@ -363,7 +360,7 @@ interface ProgressSeriesOut {
 const getProgressSeries: ToolSpec<ProgressSeriesArgs, ProgressSeriesOut> = {
   name: 'get_progress_series',
   description:
-    'Top set per session for each requested (variant, rep range) bucket — the same data the Progress chart plots. Use when: "how has X trended" / "am I getting stronger on X". Don\'t use: for an all-time PR (use get_prs) or for a single session detail (use get_session_detail). Returns `{ units, series: [{ variantName, liftFamilyName, plannedRepsMin, plannedRepsMax, metric: \'weight\'|\'reps\', points: [{ date, value }] }] }`. Discover bucket IDs via list_chartable_buckets first.',
+    "Top set per session for each requested (variant, rep range) bucket — the same data the Progress chart plots. Use when: \"how has X trended\" / \"am I getting stronger on X\". Don't use: for an all-time PR (use get_prs) or for a single session detail (use get_session_detail). Returns `{ units, series: [{ variantName, liftFamilyName, plannedRepsMin, plannedRepsMax, metric: 'weight'|'reps', points: [{ date, value }] }] }`. Discover bucket IDs via list_chartable_buckets first.",
   mutates: false,
   risk: 'read',
   jsonSchema: {
@@ -432,7 +429,7 @@ interface ActiveRoutineOut {
 const getActiveRoutine: ToolSpec<Record<string, never>, ActiveRoutineOut> = {
   name: 'get_active_routine',
   description:
-    'The user\'s currently active program: every split day, the lifts planned on it, and each lift\'s planned sets/rep ranges. Use when: "what does my routine look like" / "what\'s scheduled". Don\'t use: to ask what they actually did — that\'s list_recent_sessions / get_session_detail. The active program name is also stated in the system prompt, so calling this just to learn that name is unnecessary. Returns `{ programName, splitDays: [{ orderIndex, dayName, isRest, lifts: [{ liftFamily, defaultVariant, plannedSets: [{ plannedReps, plannedWeight }] }] }] }`.',
+    "The user's currently active program: every split day, the lifts planned on it, and each lift's planned sets/rep ranges. Use when: \"what does my routine look like\" / \"what's scheduled\". Don't use: to ask what they actually did — that's list_recent_sessions / get_session_detail. The active program name is also stated in the system prompt, so calling this just to learn that name is unnecessary. Returns `{ programName, splitDays: [{ orderIndex, dayName, isRest, lifts: [{ liftFamily, defaultVariant, plannedSets: [{ plannedReps, plannedWeight }] }] }] }`.",
   mutates: false,
   risk: 'read',
   jsonSchema: { type: 'object', properties: {}, additionalProperties: false },
@@ -540,10 +537,7 @@ const getPrs: ToolSpec<PrsArgs, { units: Units; prs: PrOut[] }> = {
     if (args.variantId) {
       lifts = await db.live.sessionLift.where('variantId').equals(args.variantId).toArray();
     } else if (args.liftFamilyId) {
-      lifts = await db.live.sessionLift
-        .where('liftFamilyId')
-        .equals(args.liftFamilyId)
-        .toArray();
+      lifts = await db.live.sessionLift.where('liftFamilyId').equals(args.liftFamilyId).toArray();
     } else {
       lifts = await db.live.sessionLift.toArray();
     }
@@ -565,10 +559,7 @@ const getPrs: ToolSpec<PrsArgs, { units: Units; prs: PrOut[] }> = {
     for (const lift of liftsInScope) {
       const session = sessionById.get(lift.sessionId)!;
       const sessionUnits: Units = locationById.get(session.locationId)?.units ?? units;
-      const sets = await db.live.sessionSet
-        .where('sessionLiftId')
-        .equals(lift.id)
-        .toArray();
+      const sets = await db.live.sessionSet.where('sessionLiftId').equals(lift.id).toArray();
       for (const s of sets) {
         if (!s.loggedAt || s.loggedWeight == null || s.loggedReps == null) continue;
         if (s.loggedWeight === 0) continue;
@@ -731,10 +722,7 @@ const getWeeklyVolume: ToolSpec<WeeklyVolumeArgs, WeeklyVolumeOut> = {
       const bucket = buckets.get(weekStart);
       if (!bucket) continue; // outside window
       const sessionUnits: Units = locationById.get(session.locationId)?.units ?? units;
-      const sets = await db.live.sessionSet
-        .where('sessionLiftId')
-        .equals(lift.id)
-        .toArray();
+      const sets = await db.live.sessionSet.where('sessionLiftId').equals(lift.id).toArray();
       const family = familyName.get(lift.liftFamilyId) ?? '(unknown)';
       let famAcc = bucket.byFamily.get(family);
       if (!famAcc) {

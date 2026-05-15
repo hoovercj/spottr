@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Fab } from '@mui/material';
+import { IconButton } from '@mui/material';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { useLocation } from 'react-router-dom';
 import { ChatDialog } from '@/features/ai/chat/ChatDialog';
@@ -9,11 +9,14 @@ import { ChatDialog } from '@/features/ai/chat/ChatDialog';
  * AppLayout, gated to read-friendly screens (Home, History, Progress).
  * Stays well above the bottom navbar and respects the safe-area inset.
  *
- * Workout / Lift / RoutineEdit deliberately don't get the FAB:
+ * Workout / Lift / RoutineEdit deliberately don't get the button:
  *   - Workout has the "Finish workout" CTA at the bottom
  *   - Lift has the numeric keypad sheet
  *   - RoutineEdit has a save-bar
- * adding a FAB there would collide with the primary action surface.
+ * adding a floating button there would collide with the primary action surface.
+ *
+ * UX spec §11 forbids `<Fab>`; we build the same visual affordance from
+ * a primary-colored circular `<IconButton>` instead.
  */
 
 const ALLOWED_PREFIXES = ['/history', '/progress'];
@@ -32,7 +35,7 @@ export function ChatFab() {
 
   return (
     <>
-      <Fab
+      <IconButton
         color="primary"
         aria-label="Open AI coach"
         onClick={() => setOpen(true)}
@@ -42,10 +45,17 @@ export function ChatFab() {
           // Floats above the bottom navbar (~56px) plus iOS safe-area.
           bottom: 'calc(env(safe-area-inset-bottom, 0px) + 72px)',
           zIndex: (t) => t.zIndex.fab,
+          // FAB-shaped: filled primary circle, 56px tap target, lifted.
+          width: 56,
+          height: 56,
+          bgcolor: 'primary.main',
+          color: 'primary.contrastText',
+          boxShadow: 3,
+          '&:hover': { bgcolor: 'primary.dark' },
         }}
       >
         <AutoAwesomeIcon />
-      </Fab>
+      </IconButton>
       <ChatDialog open={open} onClose={() => setOpen(false)} />
     </>
   );

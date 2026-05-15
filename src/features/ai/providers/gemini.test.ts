@@ -7,7 +7,7 @@ function streamFrom(chunks: string[]): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
     pull(controller) {
       if (i < chunks.length) {
-        controller.enqueue(enc.encode(chunks[i]!));
+        controller.enqueue(enc.encode(chunks[i]));
         i++;
       } else {
         controller.close();
@@ -32,13 +32,7 @@ describe('parseSseStream', () => {
 
   it('handles events split across read chunks', async () => {
     const events = await collect(
-      parseSseStream(
-        streamFrom([
-          'data: {"piece":"on',
-          'e"}\n',
-          '\ndata: {"piece":"two"}\n\n',
-        ]),
-      ),
+      parseSseStream(streamFrom(['data: {"piece":"on', 'e"}\n', '\ndata: {"piece":"two"}\n\n'])),
     );
     expect(events).toEqual(['{"piece":"one"}', '{"piece":"two"}']);
   });
@@ -58,9 +52,7 @@ describe('parseSseStream', () => {
   });
 
   it('ignores comment lines (starting with `:`)', async () => {
-    const events = await collect(
-      parseSseStream(streamFrom([`: keep-alive\n\ndata: {"a":1}\n\n`])),
-    );
+    const events = await collect(parseSseStream(streamFrom([`: keep-alive\n\ndata: {"a":1}\n\n`])));
     expect(events).toEqual(['{"a":1}']);
   });
 
@@ -74,10 +66,7 @@ describe('parseSseStream', () => {
   it('preserves UTF-8 multibyte sequences split across chunks', async () => {
     const enc = new TextEncoder();
     const heart = enc.encode('❤'); // 3 bytes
-    const first = new Uint8Array([
-      ...enc.encode('data: {"t":"'),
-      heart[0]!,
-    ]);
+    const first = new Uint8Array([...enc.encode('data: {"t":"'), heart[0]!]);
     const second = new Uint8Array([heart[1]!, heart[2]!, ...enc.encode('"}\n\n')]);
     const stream = new ReadableStream<Uint8Array>({
       pull(controller) {

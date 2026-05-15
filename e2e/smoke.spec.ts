@@ -38,13 +38,25 @@ test('start a workout, log a set, complete it', async ({ page }) => {
   // Either today's card starts the session inline (lands on /workout) or a
   // non-today day opens a preview drawer with its own "Start workout" footer
   // button. Cover both.
-  if (await page.getByRole('button', { name: /^start workout$/i }).first().isVisible()) {
-    await page.getByRole('button', { name: /^start workout$/i }).first().click();
+  if (
+    await page
+      .getByRole('button', { name: /^start workout$/i })
+      .first()
+      .isVisible()
+  ) {
+    await page
+      .getByRole('button', { name: /^start workout$/i })
+      .first()
+      .click();
   }
   await page.waitForURL(/\/workout(?:$|\?)/, { timeout: 10_000 });
 
   // Tap the first lift in the session to navigate into its logging screen.
-  await page.getByRole('link').filter({ hasText: /.+ sets$/ }).first().click();
+  await page
+    .getByRole('link')
+    .filter({ hasText: /.+ sets$/ })
+    .first()
+    .click();
   await page.waitForURL(/\/lift\//, { timeout: 5_000 });
 
   // Tap the first set's "Log set" checkbox (the SetTable's per-row check).
@@ -54,7 +66,10 @@ test('start a workout, log a set, complete it', async ({ page }) => {
   await expect(logCheckbox).toBeChecked();
 
   // Back to the workout overview, then complete.
-  await page.getByRole('link', { name: /workout/i }).first().click();
+  await page
+    .getByRole('link', { name: /workout/i })
+    .first()
+    .click();
   await page.waitForURL(/\/workout(?:$|\?)/, { timeout: 5_000 });
   const completeButton = page.getByRole('button', { name: /^complete$/i });
   await expect(completeButton).toBeEnabled();

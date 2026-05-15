@@ -9,12 +9,8 @@
  * adapter.
  */
 
-import {
-  ActionBarPrimitive,
-  MessagePrimitive,
-  useMessage,
-} from '@assistant-ui/react';
-import { Box, IconButton, Stack, Tooltip } from '@mui/material';
+import { ActionBarPrimitive, MessagePrimitive, useMessage } from '@assistant-ui/react';
+import { Box, IconButton, Stack } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { MarkdownText } from '@/features/ai/chat/MarkdownText';
 import { ToolCallView } from '@/features/ai/chat/ToolCallView';
@@ -78,11 +74,9 @@ function AssistantActions() {
     >
       <Stack direction="row" spacing={0.5} sx={{ pl: 0.5, opacity: 0.7 }}>
         <ActionBarPrimitive.Copy asChild>
-          <Tooltip title="Copy">
-            <IconButton size="small">
-              <ContentCopyIcon fontSize="inherit" />
-            </IconButton>
-          </Tooltip>
+          <IconButton size="small" aria-label="Copy">
+            <ContentCopyIcon fontSize="inherit" />
+          </IconButton>
         </ActionBarPrimitive.Copy>
       </Stack>
     </ActionBarPrimitive.Root>

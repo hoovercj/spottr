@@ -15,7 +15,7 @@ import type { AIMessage } from '@/features/ai/providers/types';
 const EMPTY_STATE_PROMPTS: ReadonlyArray<string> = [
   "What's my squat PR?",
   'How has my volume trended over the past 8 weeks?',
-  "What did I lift this week?",
+  'What did I lift this week?',
 ];
 
 export function deriveSuggestions(messages: AIMessage[]): string[] {
@@ -53,23 +53,14 @@ export function deriveSuggestions(messages: AIMessage[]): string[] {
         "What's my PR on the heaviest lift here?",
       ];
     case 'get_variant_history':
-      return [
-        "What's my PR for this lift?",
-        'How does this compare across other rep ranges?',
-      ];
+      return ["What's my PR for this lift?", 'How does this compare across other rep ranges?'];
     case 'get_progress_series':
-      return [
-        "What's my all-time PR for this?",
-        'Show me the weekly volume for this lift family.',
-      ];
+      return ["What's my all-time PR for this?", 'Show me the weekly volume for this lift family.'];
     case 'get_prs':
-      return [
-        'How has this trended over the past 8 weeks?',
-        'Show me my weekly volume.',
-      ];
+      return ['How has this trended over the past 8 weeks?', 'Show me my weekly volume.'];
     case 'get_weekly_volume':
       return [
-        "Which lift family contributed most to that volume?",
+        'Which lift family contributed most to that volume?',
         'Am I trending up or holding steady?',
       ];
     case 'get_active_routine':

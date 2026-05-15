@@ -7,7 +7,7 @@
 
 import type { KeyboardEvent } from 'react';
 import { ComposerPrimitive, useComposerRuntime, useThread } from '@assistant-ui/react';
-import { Box, IconButton, TextField, Tooltip } from '@mui/material';
+import { Box, IconButton, TextField } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import StopIcon from '@mui/icons-material/Stop';
 
@@ -75,27 +75,15 @@ export function ComposerView() {
 
         {isRunning ? (
           <ComposerPrimitive.Cancel asChild>
-            <Tooltip title="Stop">
-              <IconButton
-                color="primary"
-                aria-label="Stop"
-                sx={{ width: 48, height: 48 }}
-              >
-                <StopIcon />
-              </IconButton>
-            </Tooltip>
+            <IconButton color="primary" aria-label="Stop" sx={{ width: 48, height: 48 }}>
+              <StopIcon />
+            </IconButton>
           </ComposerPrimitive.Cancel>
         ) : (
           <ComposerPrimitive.Send asChild>
-            <Tooltip title="Send">
-              <IconButton
-                color="primary"
-                aria-label="Send"
-                sx={{ width: 48, height: 48 }}
-              >
-                <SendIcon />
-              </IconButton>
-            </Tooltip>
+            <IconButton color="primary" aria-label="Send" sx={{ width: 48, height: 48 }}>
+              <SendIcon />
+            </IconButton>
           </ComposerPrimitive.Send>
         )}
       </Box>

@@ -237,7 +237,9 @@ async function runConsentFlow(): Promise<PersistedAccessToken> {
     redirect_uri: 'postmessage',
   });
   if (body.error || !body.access_token) {
-    throw new Error(`Drive token exchange failed: ${body.error_description ?? body.error ?? 'no token returned'}`);
+    throw new Error(
+      `Drive token exchange failed: ${body.error_description ?? body.error ?? 'no token returned'}`,
+    );
   }
   if (body.refresh_token) {
     await setRefreshToken(body.refresh_token);
@@ -265,7 +267,9 @@ async function runRefreshFlow(refreshToken: string): Promise<PersistedAccessToke
     throw new Error('Drive refresh token rejected — reconnect required');
   }
   if (body.error || !body.access_token) {
-    throw new Error(`Drive token refresh failed: ${body.error_description ?? body.error ?? 'no token returned'}`);
+    throw new Error(
+      `Drive token refresh failed: ${body.error_description ?? body.error ?? 'no token returned'}`,
+    );
   }
   // Google may rotate refresh tokens; persist the new one if returned.
   if (body.refresh_token) await setRefreshToken(body.refresh_token);

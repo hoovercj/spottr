@@ -20,7 +20,7 @@ describe('progress queries (pure)', () => {
     await getDb().delete();
   });
 
-  it('default-progress buckets returns the first slot plan\'s first-set range per non-rest slot, deduped', async () => {
+  it("default-progress buckets returns the first slot plan's first-set range per non-rest slot, deduped", async () => {
     await runSeed();
     const buckets = await getDefaultProgressBucketsPure();
     expect(buckets.length).toBeGreaterThan(0);

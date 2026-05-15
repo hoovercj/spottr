@@ -33,12 +33,7 @@ export function ThemeModeToggle() {
       <Typography variant="body2" color="text.secondary">
         Follow your device's setting or pick one explicitly.
       </Typography>
-      <ToggleButtonGroup
-        value={mode}
-        exclusive
-        onChange={onChange}
-        aria-label="Color scheme"
-      >
+      <ToggleButtonGroup value={mode} exclusive onChange={onChange} aria-label="Color scheme">
         <ToggleButton value="system" sx={{ px: 3 }}>
           System
         </ToggleButton>

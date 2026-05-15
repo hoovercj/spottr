@@ -8,13 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Alert,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Box, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import {
   EMPTY_PROFILE,
   getUserProfile,
@@ -82,10 +76,20 @@ export function UserProfileForm() {
   return (
     <Stack spacing={2}>
       <Typography variant="h2">About you</Typography>
-      <Alert severity="info" variant="outlined">
-        The coach reads these every message, so anything you add here shapes the next reply.
-        Leave blank what you don't want to share. Saved on this device only.
-      </Alert>
+      <Box
+        sx={{
+          border: '1px solid',
+          borderColor: 'divider',
+          backgroundColor: 'action.hover',
+          borderRadius: 1,
+          p: 1.5,
+        }}
+      >
+        <Typography variant="body2" color="text.secondary">
+          The coach reads these every message, so anything you add here shapes the next reply. Leave
+          blank what you don't want to share. Saved on this device only.
+        </Typography>
+      </Box>
 
       <TextField
         label="Goals"

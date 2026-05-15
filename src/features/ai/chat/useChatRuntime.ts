@@ -125,9 +125,10 @@ function convertViewMessage(vm: ViewMessage): ThreadMessageLike {
 }
 
 export function useChatRuntime(session: UseChatSession) {
-  const viewMessages = useMemo(() => buildViewMessages(session.state.messages), [
-    session.state.messages,
-  ]);
+  const viewMessages = useMemo(
+    () => buildViewMessages(session.state.messages),
+    [session.state.messages],
+  );
   const suggestions = useMemo(
     () => deriveSuggestions(session.state.messages).map((prompt) => ({ prompt })),
     [session.state.messages],
@@ -148,8 +149,12 @@ export function useChatRuntime(session: UseChatSession) {
     [session],
   );
 
-  const onCancel = useCallback(async (): Promise<void> => {
+  // Adapter expects `() => Promise<void>` even though our cancel is sync;
+  // return the resolved promise instead of marking the arrow async (which
+  // ESLint's `require-await` would flag for having no await).
+  const onCancel = useCallback((): Promise<void> => {
     session.cancel();
+    return Promise.resolve();
   }, [session]);
 
   const adapter: ExternalStoreAdapter<ViewMessage> = {

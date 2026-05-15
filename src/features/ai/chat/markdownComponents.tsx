@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * MUI renderers for every markdown element MarkdownTextPrimitive emits.
  * Centralized here so the "what does AI markdown look like" answer lives
@@ -8,6 +9,11 @@
  * gets a subtle plate-style chip; fenced code blocks render as a
  * monospace pane with a horizontal scroll guard and a copy affordance
  * baked into the `CodeHeader` override.
+ *
+ * The eslint-disable above silences the `react-refresh/only-export-components`
+ * warning intentionally: this file exports both component functions and a
+ * `markdownComponents` map that consumes them. Splitting them across files
+ * would just spread the same concern across three modules.
  */
 
 import { Box, Link, Typography, useTheme } from '@mui/material';
@@ -24,17 +30,11 @@ function P({ children }: PropsWithChildren) {
   return <Typography {...PROSE}>{children}</Typography>;
 }
 
-function H({
-  level,
-  children,
-}: PropsWithChildren<{ level: 2 | 3 | 4 | 5 | 6 }>) {
+function H({ level, children }: PropsWithChildren<{ level: 2 | 3 | 4 | 5 | 6 }>) {
   // h1 from a model would dominate the dialog; cap top-level model
   // headings at h2 so the conversation header stays the largest text.
   return (
-    <Typography
-      variant={`h${level}` as 'h2' | 'h3' | 'h4' | 'h5' | 'h6'}
-      sx={{ mt: 1.5, mb: 0.5 }}
-    >
+    <Typography variant={`h${level}`} sx={{ mt: 1.5, mb: 0.5 }}>
       {children}
     </Typography>
   );
@@ -64,10 +64,7 @@ function LI({ children }: PropsWithChildren) {
   );
 }
 
-function A({
-  href,
-  children,
-}: PropsWithChildren<{ href?: string | undefined }>) {
+function A({ href, children }: PropsWithChildren<{ href?: string | undefined }>) {
   return (
     <Link href={href} target="_blank" rel="noreferrer noopener">
       {children}
@@ -94,7 +91,12 @@ function BQ({ children }: PropsWithChildren) {
 }
 
 function HR() {
-  return <Box component="hr" sx={{ my: 1.5, border: 0, borderTop: '1px solid', borderColor: 'divider' }} />;
+  return (
+    <Box
+      component="hr"
+      sx={{ my: 1.5, border: 0, borderTop: '1px solid', borderColor: 'divider' }}
+    />
+  );
 }
 
 /**
