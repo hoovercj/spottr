@@ -33,10 +33,10 @@ If `VITE_GOOGLE_OAUTH_CLIENT_ID` is unset at build time, the Drive option is hid
    - User support email: your address
    - App logo: optional (skip for now)
 4. **App domain**:
-   - Application home page: `https://hoovercj.github.io/spottr/`
-   - Application privacy policy: `https://hoovercj.github.io/spottr/privacy`
-   - Application terms of service: `https://hoovercj.github.io/spottr/terms`
-5. **Authorized domains**: add `github.io`.
+   - Application home page: `https://codyhoover.com/spottr/`
+   - Application privacy policy: `https://codyhoover.com/spottr/privacy`
+   - Application terms of service: `https://codyhoover.com/spottr/terms`
+5. **Authorized domains**: add `codyhoover.com`.
 6. **Developer contact information**: your email.
 7. Save and continue.
 8. **Scopes** step:
@@ -55,7 +55,7 @@ If `VITE_GOOGLE_OAUTH_CLIENT_ID` is unset at build time, the Drive option is hid
 3. Application type: **Web application**.
 4. Name: `Spottr Web`.
 5. **Authorized JavaScript origins** — add each origin you'll auth from:
-   - `https://hoovercj.github.io` (production)
+   - `https://codyhoover.com` (production)
    - `http://localhost:5173` (dev)
    - `http://localhost:4173` (vite preview)
 6. **Authorized redirect URIs** — the Google Identity Services Web flow uses postMessage and doesn't strictly need a redirect URI, but adding the same origins doesn't hurt.
@@ -93,7 +93,7 @@ Until then, Google warns test users with a "Google hasn't verified this app" scr
 For `drive.file` (non-sensitive scope), verification mostly requires:
 
 - A working public privacy policy URL.
-- Domain verification of `github.io` (which is owned by GitHub, not you — this is the part that historically blocks GitHub-Pages-hosted apps; verification may require moving to a custom domain).
+- Domain verification of `codyhoover.com` via Google Search Console (TXT record on the domain).
 - A short questionnaire.
 
 If you ever do submit, kick it off from **OAuth consent screen → Publishing status → Push to production**.
