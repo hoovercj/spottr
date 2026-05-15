@@ -6,6 +6,11 @@
  * One `send()` call = one model turn. The chat session orchestrator loops
  * over `send()` until the assistant returns text instead of tool calls, so
  * keeping this single-shot keeps the provider boundary clean.
+ *
+ * When the caller passes `onProgress`, we use `:streamGenerateContent?alt=sse`
+ * and emit a partial assistant message after each parsed event. Otherwise
+ * we use the non-streaming `:generateContent` endpoint (slightly cheaper
+ * to debug; also used by the Settings "Test connection" button).
  */
 
 import type {
@@ -87,6 +92,9 @@ export class GeminiProvider implements AIProvider {
 
   async send(req: AISendRequest): Promise<AISendResult> {
     const body = buildRequestBody(req.messages, req.tools);
+    if (req.onProgress) {
+      return this.#sendStreaming(body, req.signal, req.onProgress);
+    }
     const url = `${ENDPOINT_BASE}/${encodeURIComponent(this.#model)}:generateContent?key=${encodeURIComponent(this.#apiKey)}`;
     const res = await fetch(url, {
       method: 'POST',
@@ -101,6 +109,149 @@ export class GeminiProvider implements AIProvider {
     }
     return decodeResponse(json);
   }
+
+  async #sendStreaming(
+    body: GeminiRequest,
+    signal: AbortSignal | undefined,
+    onProgress: (partial: AIMessage) => void,
+  ): Promise<AISendResult> {
+    const url = `${ENDPOINT_BASE}/${encodeURIComponent(this.#model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(this.#apiKey)}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!res.ok) {
+      // Non-2xx on the streaming endpoint returns a single JSON error.
+      const errJson = (await res.json().catch(() => null)) as GeminiResponse | null;
+      const msg = errJson?.error?.message ?? `Gemini HTTP ${res.status}`;
+      throw new Error(`Gemini stream failed: ${msg}`);
+    }
+    if (!res.body) throw new Error('Gemini stream: no response body');
+
+    // Accumulate text + tool calls across SSE events. Tool-call state must
+    // live OUTSIDE the per-chunk loop (assistant-ui flickers if tool-call
+    // parts blink in/out between chunks).
+    let text = '';
+    const toolCalls: AIToolCall[] = [];
+    let lastUsage: AISendResult['usage'];
+
+    for await (const chunk of parseSseStream(res.body)) {
+      // Each SSE `data:` payload is a single GeminiResponse-shaped JSON.
+      let parsed: GeminiResponse | null = null;
+      try {
+        parsed = JSON.parse(chunk) as GeminiResponse;
+      } catch {
+        // Skip malformed events; Gemini occasionally emits keep-alive
+        // blank lines that our parser already filters, but we belt-and-
+        // suspender it here.
+        continue;
+      }
+      if (parsed.error) {
+        throw new Error(`Gemini stream error: ${parsed.error.message}`);
+      }
+      const candidate = parsed.candidates?.[0];
+      const parts = candidate?.content?.parts ?? [];
+      for (const p of parts) {
+        if ('text' in p && typeof p.text === 'string') text += p.text;
+        if ('functionCall' in p) {
+          toolCalls.push({
+            id: newId(),
+            name: p.functionCall.name,
+            args: p.functionCall.args ?? {},
+          });
+        }
+      }
+      if (parsed.usageMetadata) {
+        lastUsage = {
+          inputTokens: parsed.usageMetadata.promptTokenCount,
+          outputTokens: parsed.usageMetadata.candidatesTokenCount,
+        };
+      }
+      onProgress(makePartial(text, toolCalls));
+    }
+
+    return { messages: [makePartial(text, toolCalls)], usage: lastUsage };
+  }
+}
+
+function makePartial(text: string, toolCalls: AIToolCall[]): AIMessage {
+  const msg: AIMessage = { role: 'assistant', content: text };
+  if (toolCalls.length > 0) msg.toolCalls = toolCalls;
+  return msg;
+}
+
+/**
+ * Yields each `data:` payload (one Gemini event = one JSON blob) from a
+ * server-sent-events response body. Handles split UTF-8 codepoints across
+ * chunk boundaries, multi-line data blocks, and ignores comments / empty
+ * keep-alives.
+ */
+export async function* parseSseStream(stream: ReadableStream<Uint8Array>): AsyncGenerator<string> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        // Decode any trailing bytes. SSE events terminate on a blank
+        // line, but some providers omit the trailing one — force-close
+        // the final event so a stream that ends mid-buffer still emits
+        // anything its buffer contains.
+        buffer += decoder.decode();
+        if (buffer.length > 0 && !/\n\n$|\r\n\r\n$/.test(buffer)) {
+          buffer += '\n\n';
+        }
+        const tail = popEvents(buffer);
+        for (const e of tail.events) yield e;
+        return;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      const out = popEvents(buffer);
+      buffer = out.remainder;
+      for (const e of out.events) yield e;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/**
+ * SSE events are separated by a blank line ("\n\n" or "\r\n\r\n"). Each
+ * event is a set of `field: value` lines; we only care about `data:`,
+ * which may repeat across multiple lines (joined by "\n" per the spec).
+ */
+function popEvents(buffer: string): { events: string[]; remainder: string } {
+  const events: string[] = [];
+  // Normalize \r\n → \n so the splitter handles both.
+  const normalized = buffer.replace(/\r\n/g, '\n');
+  let rest = normalized;
+  let idx = rest.indexOf('\n\n');
+  while (idx >= 0) {
+    const raw = rest.slice(0, idx);
+    rest = rest.slice(idx + 2);
+    const data = extractData(raw);
+    if (data) events.push(data);
+    idx = rest.indexOf('\n\n');
+  }
+  return { events, remainder: rest };
+}
+
+function extractData(rawEvent: string): string | null {
+  const lines = rawEvent.split('\n');
+  const dataLines: string[] = [];
+  for (const line of lines) {
+    if (line.startsWith(':')) continue; // comment / keep-alive
+    if (line.startsWith('data:')) {
+      // Per spec, the value is everything after a single leading space.
+      const value = line.slice(5);
+      dataLines.push(value.startsWith(' ') ? value.slice(1) : value);
+    }
+  }
+  if (dataLines.length === 0) return null;
+  return dataLines.join('\n');
 }
 
 function buildRequestBody(messages: AIMessage[], tools: ToolSpec[]): GeminiRequest {

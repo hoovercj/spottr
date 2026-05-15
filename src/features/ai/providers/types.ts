@@ -64,6 +64,14 @@ export interface AIToolCall {
 }
 
 export interface AIMessage {
+  /**
+   * Stable client-side identity. Assigned by the chat session when a turn
+   * is created; lets streaming patches replace the same row in place and
+   * keeps the UI runtime adapter from re-keying parts on every chunk.
+   * Optional in the type so providers don't have to fabricate one — the
+   * session promotes it to required on store entry.
+   */
+  id?: string;
   role: AIRole;
   /** Text content. Empty string when an assistant turn only emits tool calls. */
   content: string;
@@ -82,6 +90,13 @@ export interface AISendRequest {
   messages: AIMessage[];
   tools: ToolSpec[];
   signal?: AbortSignal;
+  /**
+   * Streaming hook. Called with the in-flight assistant turn as text and
+   * tool-call parts accumulate. The final `send()` resolves with the
+   * complete turn; the caller can ignore `onProgress` if it just wants
+   * the resolved result.
+   */
+  onProgress?: (partial: AIMessage) => void;
 }
 
 export interface AISendResult {

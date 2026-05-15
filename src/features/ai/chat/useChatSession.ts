@@ -12,7 +12,22 @@ import { resolveProvider } from '@/features/ai/providers/registry';
 import { TOOLS, getToolByName } from '@/features/ai/tools/catalog';
 import { buildSystemPrompt } from '@/features/ai/prompts/systemPrompt';
 import { todayLocalDateString } from '@/data/calendarDate';
+import { newId } from '@/data/ids';
 import type { AIMessage, AIToolCall } from '@/features/ai/providers/types';
+
+/**
+ * Each assistant turn gets a stable client-generated id so the streaming
+ * patch can replace the same row in `messages` without identity churn —
+ * critical to keep assistant-ui's tool-call accordions from re-mounting
+ * on every chunk.
+ */
+function newAssistantId(): string {
+  return `asst-${newId()}`;
+}
+
+function newToolMessageId(): string {
+  return `tool-${newId()}`;
+}
 
 const MAX_TOOL_LOOPS = 6;
 
@@ -27,6 +42,8 @@ export interface UseChatSession {
   send(text: string): Promise<void>;
   reset(): void;
   cancel(): void;
+  /** Alias for `cancel` — reads more naturally from a Stop button. */
+  stop(): void;
 }
 
 export function useChatSession(): UseChatSession {
@@ -51,7 +68,11 @@ export function useChatSession(): UseChatSession {
         role: 'system',
         content: buildSystemPrompt(todayLocalDateString()),
       };
-      const userMsg: AIMessage = { role: 'user', content: trimmed };
+      const userMsg: AIMessage = {
+        id: `user-${newId()}`,
+        role: 'user',
+        content: trimmed,
+      };
       const baseTranscript: AIMessage[] = [...messages, userMsg];
       setMessages(baseTranscript);
       setIsStreaming(true);
@@ -60,30 +81,51 @@ export function useChatSession(): UseChatSession {
       abortRef.current = ctrl;
 
       try {
+        // `working` is the model-facing transcript (includes the system
+        // prompt). `userVisible` (= setMessages) excludes it.
         let working: AIMessage[] = [system, ...baseTranscript];
         for (let loop = 0; loop < MAX_TOOL_LOOPS; loop++) {
+          // Reserve a stable assistant message row up front so the
+          // streaming patch always updates the same identity. The row
+          // starts empty and fills in via onProgress.
+          const assistantId = newAssistantId();
+          const placeholder: AIMessage = {
+            id: assistantId,
+            role: 'assistant',
+            content: '',
+          };
+          setMessages((cur) => [...cur, placeholder]);
+
+          let finalMsg: AIMessage = placeholder;
           const res = await provider.send({
             messages: working,
             tools: TOOLS,
             signal: ctrl.signal,
+            onProgress: (partial) => {
+              finalMsg = { ...placeholder, ...partial, id: assistantId };
+              setMessages((cur) => replaceById(cur, assistantId, finalMsg));
+            },
           });
-          // Append the new assistant turn(s) — strip the system prompt
-          // before exposing to the UI; that's an implementation detail.
-          const newMsgs = res.messages;
-          working = [...working, ...newMsgs];
-          setMessages((cur) => [...cur, ...newMsgs]);
-
-          const last = newMsgs[newMsgs.length - 1];
-          if (!last) break;
-          if (!last.toolCalls || last.toolCalls.length === 0) {
-            // Plain assistant text — turn complete.
-            return;
+          // Providers may return the full assistant turn in `messages[0]`;
+          // prefer that as the canonical final state if richer than
+          // what we've streamed.
+          const last = res.messages[res.messages.length - 1];
+          if (last) {
+            finalMsg = { ...placeholder, ...last, id: assistantId };
+            setMessages((cur) => replaceById(cur, assistantId, finalMsg));
           }
-          // Execute each tool call, append the responses, and loop.
+          working = [...working, finalMsg];
+
+          if (!finalMsg.toolCalls || finalMsg.toolCalls.length === 0) {
+            return; // plain assistant text — done
+          }
+
+          // Execute each tool call, append responses, loop.
           const toolResponses: AIMessage[] = [];
-          for (const call of last.toolCalls) {
+          for (const call of finalMsg.toolCalls) {
             const out = await runTool(call);
             toolResponses.push({
+              id: newToolMessageId(),
               role: 'tool',
               content: JSON.stringify(out),
               toolCallId: call.id,
@@ -122,7 +164,12 @@ export function useChatSession(): UseChatSession {
     send,
     reset,
     cancel,
+    stop: cancel,
   };
+}
+
+function replaceById(messages: AIMessage[], id: string, next: AIMessage): AIMessage[] {
+  return messages.map((m) => (m.id === id ? next : m));
 }
 
 async function runTool(call: AIToolCall): Promise<unknown> {
