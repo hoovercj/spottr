@@ -372,16 +372,92 @@ function DayCard({
         .slice(0, 3)
         .join(', ') + (day.plans.length > 3 ? '…' : '');
 
-  const dateLabel = day.calendarDate.slice(5).replace('-', '/'); // MM/DD
-  // Today's card gets a long-form date — there's enough room and it reads
-  // far better than the bare MM/DD that fits on the smaller pending cards.
-  const todayDateLabel = isToday
-    ? (() => {
-        const [yearStr, monthStr, dayStr] = day.calendarDate.split('-');
-        const d = new Date(Number(yearStr), Number(monthStr) - 1, Number(dayStr));
-        return new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(d);
-      })()
-    : dateLabel;
+  // Long-form date for every card. The format already contains the weekday,
+  // so cards don't prefix `day.dayLabel` separately — that was just the
+  // short-format placeholder.
+  const [yearStr, monthStr, dayNumStr] = day.calendarDate.split('-');
+  const cardDate = new Date(Number(yearStr), Number(monthStr) - 1, Number(dayNumStr));
+  const dateLabel = new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(cardDate);
+
+  const completedBadge = (
+    <Box
+      aria-label="Completed"
+      sx={{
+        width: 32,
+        height: 32,
+        borderRadius: '50%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'primary.main',
+        color: 'primary.contrastText',
+        fontSize: '1rem',
+        flexShrink: 0,
+        ml: 1,
+      }}
+    >
+      ✓
+    </Box>
+  );
+
+  // Today wins over completed: even when today's workout is done, the row
+  // stays highlighted (full-size card, primary border) so the eye still
+  // lands on it. The Start button is swapped for a tap-through to the
+  // completed session.
+  if (isToday && !isRest) {
+    return (
+      <Box sx={cardSx({ today: true, dim: false })}>
+        <Stack
+          direction="row"
+          justifyContent="space-between"
+          alignItems="center"
+          sx={{ width: '100%' }}
+        >
+          <Box
+            component="button"
+            type="button"
+            onClick={isCompleted ? onOpenCompleted : onOpenPreview}
+            aria-label={
+              isCompleted ? `View ${day.dayLabel} session` : `Preview ${day.dayLabel} workout`
+            }
+            sx={{
+              all: 'unset',
+              cursor: 'pointer',
+              flex: 1,
+              minWidth: 0,
+              '&:focus-visible': {
+                outline: '2px solid',
+                outlineColor: 'primary.main',
+                outlineOffset: 2,
+              },
+            }}
+          >
+            <Stack>
+              <Typography variant="caption" color="primary.main">
+                Today · {dateLabel}
+              </Typography>
+              <Typography variant="h2">{day.splitDayType.name}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {liftPreview}
+              </Typography>
+            </Stack>
+          </Box>
+          {isCompleted && completedBadge}
+        </Stack>
+        {!isCompleted && (
+          <Button
+            variant="contained"
+            fullWidth
+            disabled={busy || disableStart}
+            onClick={onStart}
+            sx={{ mt: 2, minHeight: 48 }}
+          >
+            Start workout
+          </Button>
+        )}
+      </Box>
+    );
+  }
 
   if (isCompleted) {
     return (
@@ -398,31 +474,16 @@ function DayCard({
           alignItems="center"
           sx={{ width: '100%' }}
         >
-          <Stack>
+          <Stack sx={{ minWidth: 0 }}>
             <Typography variant="body2" color="text.secondary">
-              {day.dayLabel} · {dateLabel}
+              {dateLabel}
             </Typography>
             <Typography variant="body1">{day.splitDayType.name}</Typography>
             <Typography variant="caption" color="text.secondary">
               {liftPreview}
             </Typography>
           </Stack>
-          <Box
-            aria-label="Completed"
-            sx={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: 'primary.main',
-              color: 'primary.contrastText',
-              fontSize: '1rem',
-            }}
-          >
-            ✓
-          </Box>
+          {completedBadge}
         </Stack>
       </Box>
     );
@@ -433,59 +494,10 @@ function DayCard({
       <Box sx={{ ...cardSx({ today: false, dim: true }), cursor: 'default' }} aria-disabled>
         <Stack>
           <Typography variant="body2" color="text.secondary">
-            {day.dayLabel} · {dateLabel}
+            {dateLabel}
           </Typography>
           <Typography variant="body1">Rest day</Typography>
         </Stack>
-      </Box>
-    );
-  }
-
-  if (isToday) {
-    return (
-      <Box sx={cardSx({ today: true, dim: false })}>
-        <Stack
-          direction="row"
-          justifyContent="space-between"
-          alignItems="center"
-          sx={{ width: '100%' }}
-        >
-          <Box
-            component="button"
-            type="button"
-            onClick={onOpenPreview}
-            aria-label={`Preview ${day.dayLabel} workout`}
-            sx={{
-              all: 'unset',
-              cursor: 'pointer',
-              flex: 1,
-              '&:focus-visible': {
-                outline: '2px solid',
-                outlineColor: 'primary.main',
-                outlineOffset: 2,
-              },
-            }}
-          >
-            <Stack>
-              <Typography variant="caption" color="primary.main">
-                Today · {todayDateLabel}
-              </Typography>
-              <Typography variant="h2">{day.splitDayType.name}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {liftPreview}
-              </Typography>
-            </Stack>
-          </Box>
-        </Stack>
-        <Button
-          variant="contained"
-          fullWidth
-          disabled={busy || disableStart}
-          onClick={onStart}
-          sx={{ mt: 2, minHeight: 48 }}
-        >
-          Start workout
-        </Button>
       </Box>
     );
   }
@@ -508,6 +520,7 @@ function DayCard({
             all: 'unset',
             cursor: 'pointer',
             flex: 1,
+            minWidth: 0,
             '&:focus-visible': {
               outline: '2px solid',
               outlineColor: 'primary.main',
@@ -517,7 +530,7 @@ function DayCard({
         >
           <Stack>
             <Typography variant="body2" color="text.secondary">
-              {day.dayLabel} · {dateLabel}
+              {dateLabel}
               {day.isPast && ' · missed'}
             </Typography>
             <Typography variant="body1">{day.splitDayType.name}</Typography>
