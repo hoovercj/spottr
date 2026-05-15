@@ -90,6 +90,8 @@ The current GitHub Actions workflow (`.github/workflows/deploy.yml`) doesn't yet
 
 Until then, Google warns test users with a "Google hasn't verified this app" screen on first connect. Users have to click **Advanced → Go to Spottr (unsafe)** to continue. Acceptable for personal use; not for general public.
 
+**Refresh-token lifespan reminder:** while the OAuth consent screen sits in **Testing** mode, every refresh token Google issues expires after **7 days**. The app will silently get fresh access tokens for that window; after 7 days, the next sync fails with `invalid_grant` and the user has to click "Connect Google Drive" again. To get long-lived (effectively permanent) refresh tokens, move the consent screen to **Production** (Publishing status → Push to production). Personal-use is fine to leave in Testing — just expect the weekly reconnect.
+
 For `drive.file` (non-sensitive scope), verification mostly requires:
 
 - A working public privacy policy URL.
@@ -103,6 +105,7 @@ If you ever do submit, kick it off from **OAuth consent screen → Publishing st
 ## How the app uses it
 
 - `src/features/export/googleDrive.ts` lazy-loads the GIS script on first connect.
-- On connect: requests an access token with the `drive.file` scope and consent prompt, then finds (or creates) a folder named `Spottr` in the user's My Drive. The folder id is persisted in IndexedDB.
-- On every export: uses the cached access token (or silently re-requests one if expired) and uploads `spottr-backup.json` + `spottr-backup.csv` into the folder. If files with those names already exist, they are overwritten — Drive keeps prior revisions automatically.
-- On disconnect (Settings): revokes the current token and forgets the folder id. Re-connecting re-discovers the folder and writes to it again.
+- On connect: GIS's Authorization Code Client opens a popup, the user grants the `drive.file` scope, and the app exchanges the returned auth code for `{ access_token, refresh_token }` at `https://oauth2.googleapis.com/token` (with `redirect_uri=postmessage` — the magic value for GIS popup-based code exchange, which lets us skip the client-secret requirement). Both tokens land in the IndexedDB `meta` table (`export:googleDriveRefreshToken`, `export:googleDriveAccessToken`); a folder named `Spottr` in My Drive is reused or created and its id is persisted under `export:googleDriveFolder`.
+- On every export: the access token is reused from cache until ~30s before expiry. When it expires, the app POSTs the refresh token to the token endpoint and stores the fresh access token — **no popup**, no GIS round-trip, no cookie dependency.
+- If the refresh token is revoked / expired (testing-mode apps cap them at 7 days), the next refresh returns `invalid_grant`; the app wipes the persisted tokens and surfaces `AUTH_EXPIRED` so the UI can prompt the user to reconnect.
+- On disconnect (Settings): revokes the current access token with Google, clears both tokens from IndexedDB, and forgets the folder id.

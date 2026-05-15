@@ -1,21 +1,22 @@
 /**
  * Google Drive export destination.
  *
- * Uses Google Identity Services (GIS) Web to do a PKCE-based OAuth dance
- * entirely in the browser — no backend, no client secret. The OAuth client
- * ID is a public value baked at build time from `VITE_GOOGLE_OAUTH_CLIENT_ID`.
- * If that env var is unset (e.g. local dev with no Cloud project), the
- * `isGoogleDriveAvailable()` helper returns false and the UI hides the
- * "Connect Google Drive" affordance entirely.
+ * Uses Google Identity Services (GIS) Web to drive an Authorization Code
+ * + PKCE flow entirely in the browser — no backend, no client secret. GIS
+ * handles PKCE internally and returns an auth code; we exchange the code
+ * for an access_token + refresh_token at Google's token endpoint with
+ * `redirect_uri=postmessage` (the magic value for popup-based JS clients).
+ *
+ * The refresh_token is persisted to IndexedDB so subsequent syncs can mint
+ * fresh access tokens silently via a plain `fetch` to the token endpoint —
+ * no popups, no dependence on GIS browser-session cookies. The access
+ * token is also cached (memory + IndexedDB) so a page reload mid-window
+ * doesn't force a network round-trip.
  *
  * Scope: `drive.file` — the app can only see/write files it has created.
  * The app creates (or reuses) a single folder named "Spottr" in the user's
  * My Drive and rotates two files inside it (`spottr-backup.json` and
  * `spottr-backup.csv`). Drive history keeps prior revisions automatically.
- *
- * Tokens are cached in module scope for ~50 minutes (Google grants 1h
- * tokens). On expiry, GIS silently re-requests if consent is still on
- * file — the user only sees a popup on first connect.
  */
 
 import { getDb } from '@/data/db';
@@ -25,27 +26,35 @@ const CLIENT_ID = (import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID ?? '') as string;
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const FOLDER_NAME = 'Spottr';
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
+const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 
 const META_FOLDER_KEY = 'export:googleDriveFolder';
+const META_REFRESH_TOKEN_KEY = 'export:googleDriveRefreshToken';
+const META_ACCESS_TOKEN_KEY = 'export:googleDriveAccessToken';
 
-interface GisTokenResponse {
-  access_token?: string;
-  expires_in?: number;
+interface GisCodeResponse {
+  code?: string;
+  scope?: string;
   error?: string;
   error_description?: string;
 }
 
-interface GisTokenClient {
-  requestAccessToken: (opts?: { prompt?: '' | 'none' | 'consent' | 'select_account' }) => void;
+interface GisCodeClient {
+  requestCode: () => void;
 }
 
 interface GisOAuth2 {
-  initTokenClient(opts: {
+  initCodeClient(opts: {
     client_id: string;
     scope: string;
-    callback: (response: GisTokenResponse) => void;
+    ux_mode: 'popup' | 'redirect';
+    /** Trigger a refresh_token return by requesting offline access. */
+    access_type?: 'offline' | 'online';
+    /** Forcing `consent` ensures Google issues a refresh_token even on re-connect. */
+    prompt?: '' | 'none' | 'consent' | 'select_account';
+    callback: (response: GisCodeResponse) => void;
     error_callback?: (err: { type?: string; message?: string }) => void;
-  }): GisTokenClient;
+  }): GisCodeClient;
   revoke(token: string, done?: () => void): void;
 }
 
@@ -55,6 +64,24 @@ declare global {
       accounts: { oauth2: GisOAuth2 };
     };
   }
+}
+
+/** Persisted shape for the access token in IndexedDB (under META_ACCESS_TOKEN_KEY). */
+interface PersistedAccessToken {
+  value: string;
+  /** Epoch ms when the cached token should be treated as expired. */
+  expiresAt: number;
+}
+
+/** Token-endpoint response shape. The same object covers initial exchange + refresh. */
+interface TokenEndpointResponse {
+  access_token?: string;
+  expires_in?: number;
+  refresh_token?: string;
+  scope?: string;
+  token_type?: string;
+  error?: string;
+  error_description?: string;
 }
 
 interface DriveFolderMeta {
@@ -67,7 +94,13 @@ export function isGoogleDriveAvailable(): boolean {
 }
 
 let scriptLoaded: Promise<void> | null = null;
-let cachedToken: { value: string; expiresAt: number } | null = null;
+/**
+ * In-memory mirror of the persisted access token. Keeps the hot path
+ * (every Drive call hits this) free of an IndexedDB round-trip. Synced
+ * lazily on the first read after module init and on every write.
+ */
+let cachedToken: PersistedAccessToken | null = null;
+let cachedTokenLoaded = false;
 
 function loadGisScript(): Promise<void> {
   if (scriptLoaded) return scriptLoaded;
@@ -101,44 +134,170 @@ function loadGisScript(): Promise<void> {
   return scriptLoaded;
 }
 
-async function requestAccessToken(prompt: '' | 'consent'): Promise<string> {
-  if (!CLIENT_ID) throw new Error('Google Drive is not configured for this build');
-
-  // Reuse cached token until ~30s before expiry.
-  if (cachedToken && cachedToken.expiresAt > Date.now() + 30_000) {
-    return cachedToken.value;
+/** Load the persisted access token into memory if we haven't yet this session. */
+async function hydrateCachedToken(): Promise<void> {
+  if (cachedTokenLoaded) return;
+  cachedTokenLoaded = true;
+  const row = await getDb().meta.get(META_ACCESS_TOKEN_KEY);
+  const value = row?.value as PersistedAccessToken | undefined;
+  if (value && typeof value.value === 'string' && typeof value.expiresAt === 'number') {
+    cachedToken = value;
   }
+}
 
+async function persistAccessToken(token: PersistedAccessToken): Promise<void> {
+  cachedToken = token;
+  await getDb().meta.put({ key: META_ACCESS_TOKEN_KEY, value: token });
+}
+
+async function clearPersistedTokens(): Promise<void> {
+  cachedToken = null;
+  cachedTokenLoaded = true;
+  await getDb().meta.delete(META_ACCESS_TOKEN_KEY);
+  await getDb().meta.delete(META_REFRESH_TOKEN_KEY);
+}
+
+async function getRefreshToken(): Promise<string | null> {
+  const row = await getDb().meta.get(META_REFRESH_TOKEN_KEY);
+  const value = row?.value;
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+async function setRefreshToken(token: string): Promise<void> {
+  await getDb().meta.put({ key: META_REFRESH_TOKEN_KEY, value: token });
+}
+
+/**
+ * Compute an absolute expiry timestamp from a token endpoint's `expires_in`.
+ * 600s of headroom keeps us refreshing before the call site sees a 401.
+ */
+function expiryFromTtl(expiresIn: number | undefined): number {
+  const ttl = (expiresIn ?? 3600) - 600;
+  return Date.now() + Math.max(60, ttl) * 1000;
+}
+
+/** POST to Google's token endpoint with `application/x-www-form-urlencoded` body. */
+async function postToken(body: Record<string, string>): Promise<TokenEndpointResponse> {
+  const form = new URLSearchParams(body);
+  const res = await fetch(TOKEN_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form.toString(),
+  });
+  // Both 200 and 400 return parseable JSON; the caller checks `.error`.
+  return (await res.json()) as TokenEndpointResponse;
+}
+
+/**
+ * Drive a fresh consent popup through GIS Code Client, then exchange the
+ * resulting auth code for `{ access_token, refresh_token }`. Persists both.
+ */
+async function runConsentFlow(): Promise<PersistedAccessToken> {
   await loadGisScript();
   const oauth2 = window.google?.accounts?.oauth2;
   if (!oauth2) throw new Error('Google Identity Services unavailable');
 
-  return new Promise<string>((resolve, reject) => {
-    const client = oauth2.initTokenClient({
+  const code = await new Promise<string>((resolve, reject) => {
+    const client = oauth2.initCodeClient({
       client_id: CLIENT_ID,
       scope: SCOPE,
+      ux_mode: 'popup',
+      // `offline` access asks Google to return a refresh_token; combined
+      // with `prompt: 'consent'` it's also reissued on every re-connect
+      // (Google sometimes withholds the refresh_token on subsequent grants
+      // when the prior one is still valid).
+      access_type: 'offline',
+      prompt: 'consent',
       callback: (response) => {
         if (response.error) {
           reject(new Error(`Drive auth failed: ${response.error_description ?? response.error}`));
           return;
         }
-        const token = response.access_token;
-        if (!token) {
-          reject(new Error('Drive auth returned no access token'));
+        if (!response.code) {
+          reject(new Error('Drive auth returned no code'));
           return;
         }
-        // Google tokens default to 3600s; subtract 600s headroom so we
-        // refresh before the call site sees a 401.
-        const ttl = (response.expires_in ?? 3600) - 600;
-        cachedToken = { value: token, expiresAt: Date.now() + Math.max(60, ttl) * 1000 };
-        resolve(token);
+        resolve(response.code);
       },
       error_callback: (err) => {
         reject(new Error(`Drive auth failed: ${err.message ?? err.type ?? 'unknown'}`));
       },
     });
-    client.requestAccessToken({ prompt });
+    client.requestCode();
   });
+
+  // `postmessage` is the magic redirect_uri for GIS popup-based code
+  // exchange — Google's token endpoint accepts the GIS-issued code paired
+  // with the client_id without requiring our own PKCE verifier (GIS held
+  // and proved it internally during the popup round-trip).
+  const body = await postToken({
+    code,
+    client_id: CLIENT_ID,
+    grant_type: 'authorization_code',
+    redirect_uri: 'postmessage',
+  });
+  if (body.error || !body.access_token) {
+    throw new Error(`Drive token exchange failed: ${body.error_description ?? body.error ?? 'no token returned'}`);
+  }
+  if (body.refresh_token) {
+    await setRefreshToken(body.refresh_token);
+  }
+  const token: PersistedAccessToken = {
+    value: body.access_token,
+    expiresAt: expiryFromTtl(body.expires_in),
+  };
+  await persistAccessToken(token);
+  return token;
+}
+
+/** Exchange the stored refresh token for a fresh access token. */
+async function runRefreshFlow(refreshToken: string): Promise<PersistedAccessToken> {
+  const body = await postToken({
+    refresh_token: refreshToken,
+    client_id: CLIENT_ID,
+    grant_type: 'refresh_token',
+  });
+  if (body.error === 'invalid_grant') {
+    // The refresh token was revoked from the Google account, expired
+    // (testing-mode apps cap them at 7 days), or otherwise rejected. Wipe
+    // local state so the caller surfaces a clean reconnect prompt.
+    await clearPersistedTokens();
+    throw new Error('Drive refresh token rejected — reconnect required');
+  }
+  if (body.error || !body.access_token) {
+    throw new Error(`Drive token refresh failed: ${body.error_description ?? body.error ?? 'no token returned'}`);
+  }
+  // Google may rotate refresh tokens; persist the new one if returned.
+  if (body.refresh_token) await setRefreshToken(body.refresh_token);
+  const token: PersistedAccessToken = {
+    value: body.access_token,
+    expiresAt: expiryFromTtl(body.expires_in),
+  };
+  await persistAccessToken(token);
+  return token;
+}
+
+async function requestAccessToken(prompt: '' | 'consent'): Promise<string> {
+  if (!CLIENT_ID) throw new Error('Google Drive is not configured for this build');
+
+  // Explicit consent — used by the Connect button. Always runs the popup
+  // path and replaces any prior tokens.
+  if (prompt === 'consent') {
+    const fresh = await runConsentFlow();
+    return fresh.value;
+  }
+
+  // Silent path. Memory → IndexedDB → refresh endpoint → fail.
+  await hydrateCachedToken();
+  if (cachedToken && cachedToken.expiresAt > Date.now() + 30_000) {
+    return cachedToken.value;
+  }
+  const refresh = await getRefreshToken();
+  if (!refresh) {
+    throw new Error('Drive auth required — no refresh token on file');
+  }
+  const fresh = await runRefreshFlow(refresh);
+  return fresh.value;
 }
 
 async function driveFetch<T>(
@@ -150,8 +309,11 @@ async function driveFetch<T>(
   headers.set('Authorization', `Bearer ${token}`);
   const res = await fetch(url, { ...init, headers });
   if (res.status === 401 && !init._retry) {
-    // Token must have been revoked between the cache check and the request.
+    // Token rejected between cache check and request — wipe the cached
+    // access token (memory + persisted) so the retry forces a refresh.
+    // The refresh token stays intact so the refresh path can run silently.
     cachedToken = null;
+    await getDb().meta.delete(META_ACCESS_TOKEN_KEY);
     return driveFetch<T>(url, { ...init, _retry: true });
   }
   if (!res.ok) {
@@ -223,8 +385,9 @@ export async function connectGoogleDrive(): Promise<{ folderId: string }> {
  * and folder pointer. The user can re-connect at any time.
  */
 export async function disconnectGoogleDrive(): Promise<void> {
+  await hydrateCachedToken();
   const token = cachedToken?.value;
-  cachedToken = null;
+  await clearPersistedTokens();
   await getDb().meta.delete(META_FOLDER_KEY);
   if (token && typeof window !== 'undefined' && window.google?.accounts?.oauth2) {
     await new Promise<void>((resolve) => {
