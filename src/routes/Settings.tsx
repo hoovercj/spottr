@@ -33,6 +33,7 @@ import {
 import { syncWithDriveBackup } from '@/features/export/driveSync';
 import { wipeAllData } from '@/data/reset';
 import { seedFakeHistory } from '@/data/fakeHistory';
+import { AISettingsPanel } from '@/features/ai/settings/AISettingsPanel';
 
 export function Settings() {
   const status = useExportStatus();
@@ -227,6 +228,10 @@ export function Settings() {
               Kilograms (kg)
             </ToggleButton>
           </ToggleButtonGroup>
+
+          <Divider sx={{ my: 1 }} />
+
+          <AISettingsPanel />
 
           <Divider sx={{ my: 1 }} />
 

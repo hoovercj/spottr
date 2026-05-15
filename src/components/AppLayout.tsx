@@ -2,6 +2,7 @@ import { Box } from '@mui/material';
 import { Outlet } from 'react-router-dom';
 import { BottomNavBar } from '@/components/BottomNavBar';
 import { useChromeStore } from '@/features/ui/chromeStore';
+import { ChatFab } from '@/features/ai/chat/ChatFab';
 
 /**
  * Layout shell that pins the bottom navbar under the routed page. Routes
@@ -38,6 +39,7 @@ export function AppLayout() {
         <Outlet />
       </Box>
       {!hideNavbar && <BottomNavBar />}
+      {!hideNavbar && <ChatFab />}
     </Box>
   );
 }
