@@ -1,10 +1,12 @@
-# WorkoutBuddy — Architecture
+# Spottr — Architecture
+
+> The product was originally titled **WorkoutBuddy** in the PRD and UX spec. Renamed to **Spottr** post-MVP; those vintage planning docs still use the old name for historical accuracy.
 
 Status: living document. Authoritative for schema, migration policy, and the suggested-weight rule. Cross-references PRD FR / NFR numbers verbatim.
 
 ## 1. Schema (Dexie v1)
 
-All persistent state lives in IndexedDB via Dexie. Single database `workout-buddy`. Every record has an opaque string `id` (uuid v4); never a numeric primary key, never a composite key surfaced to UI.
+All persistent state lives in IndexedDB via Dexie. Single database `spottr` (renamed from `workout-buddy` when the brand changed; any prior database under the old name is orphaned but recoverable via Settings → Restore from file). Every record has an opaque string `id` (uuid v4); never a numeric primary key, never a composite key surfaced to UI.
 
 ### 1.1 Stores
 
@@ -142,7 +144,7 @@ Drive (Sprint 7, requires user OAuth setup): same JSON / CSV produced; uploaded 
 | Units                      | lb by default; kg user-switchable; increments scale (5 / 2.5)               | PRD FR39.                                               |
 | Per-set commit granularity | One Dexie `rw` transaction per checkbox tap                                 | Atomic; sub-frame latency (NFR3).                       |
 | SW update strategy         | `registerType: 'prompt'`; activation deferred ≥30s background or cold start | NFR19.                                                  |
-| GitHub Pages base path     | Compile-time literal `/WorkoutBuddy/`                                       | One-line config + redeploy to switch later.             |
+| GitHub Pages base path     | Compile-time literal `/spottr/` (lowercase — matches the repo slug)         | One-line config + redeploy to switch later.             |
 | Pigment-CSS                | Deferred to Sprint 6 polish                                                 | Bleeding-edge integration; not blocking MVP shape.      |
 | Wake-lock fallback         | Silent degrade if `navigator.wakeLock` is unavailable                       | Best-effort per NFR15.                                  |
 

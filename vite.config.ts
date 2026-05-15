@@ -5,11 +5,14 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath } from 'node:url';
 
-const APP_BASE = '/WorkoutBuddy/';
+// GitHub Pages serves the project at the lowercase repo path
+// (`/spottr/`) — that's case-sensitive on the URL even though the brand
+// is "Spottr". Display strings stay capitalized; this constant doesn't.
+const APP_BASE = '/spottr/';
 
 /**
  * Copy `dist/index.html` to `dist/404.html` so GitHub Pages serves the SPA
- * shell on direct navigations to deep links (e.g. `/WorkoutBuddy/settings`).
+ * shell on direct navigations to deep links (e.g. `/spottr/settings`).
  * Pages returns 404.html for unmatched paths; React Router takes over once
  * the shell loads.
  */
@@ -49,8 +52,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],
       },
       manifest: {
-        name: 'WorkoutBuddy',
-        short_name: 'WorkoutBuddy',
+        name: 'Spottr',
+        short_name: 'Spottr',
         description: 'Personal strength-training log',
         start_url: APP_BASE,
         scope: APP_BASE,

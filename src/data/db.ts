@@ -21,7 +21,7 @@ import type {
 
 export const SCHEMA_VERSION = 1;
 
-export class WorkoutBuddyDB extends Dexie {
+export class SpottrDB extends Dexie {
   meta!: EntityTable<MetaRow, 'key'>;
   liftFamily!: EntityTable<LiftFamily, 'id'>;
   variant!: EntityTable<Variant, 'id'>;
@@ -39,7 +39,11 @@ export class WorkoutBuddyDB extends Dexie {
   stretchEntry!: EntityTable<StretchEntry, 'id'>;
   migrationLog!: EntityTable<MigrationLogEntry, 'id'>;
 
-  constructor(name = 'workout-buddy') {
+  // IDB databases are keyed by name; changing this orphans any prior
+  // `workout-buddy` database (data is still in browser storage but no
+  // longer reachable from the app). Restore via Settings → Restore from
+  // file if you had data under the old name.
+  constructor(name = 'spottr') {
     super(name);
 
     this.version(1).stores({
@@ -64,20 +68,20 @@ export class WorkoutBuddyDB extends Dexie {
   }
 }
 
-let _db: WorkoutBuddyDB | undefined;
+let _db: SpottrDB | undefined;
 
-export function getDb(): WorkoutBuddyDB {
+export function getDb(): SpottrDB {
   if (!_db) {
-    _db = new WorkoutBuddyDB();
+    _db = new SpottrDB();
   }
   return _db;
 }
 
 /** Test-only: replace the singleton with a fresh in-memory DB. */
-export function _resetDbForTest(name?: string): WorkoutBuddyDB {
+export function _resetDbForTest(name?: string): SpottrDB {
   if (_db) {
     _db.close();
   }
-  _db = new WorkoutBuddyDB(name);
+  _db = new SpottrDB(name);
   return _db;
 }

@@ -323,7 +323,7 @@ export interface SeedSummary {
 export async function seedIfNeeded(): Promise<SeedSummary | null> {
   // Serialize concurrent invocations (StrictMode double-mount, etc.) so two
   // racing callers can't both decide they need to seed.
-  return withWriteLock('workout-buddy-seed', async () => {
+  return withWriteLock('spottr-seed', async () => {
     const db = getDb();
     const existing = await db.meta.get(SEED_DONE_META_KEY);
     if (existing) return null;

@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 4173;
-const BASE_PATH = '/WorkoutBuddy/';
+const BASE_PATH = '/spottr/';
 
 export default defineConfig({
   testDir: './e2e',

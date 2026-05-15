@@ -28,7 +28,7 @@ const RoutineEdit = lazy(() =>
 );
 const Progress = lazy(() => import('@/routes/Progress').then((m) => ({ default: m.Progress })));
 
-const BASE = '/WorkoutBuddy/';
+const BASE = '/spottr/';
 
 function RouteFallback() {
   return (

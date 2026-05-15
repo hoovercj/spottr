@@ -84,7 +84,7 @@ export function Home() {
     }
   };
 
-  const routineName = week?.program.name ?? 'WorkoutBuddy';
+  const routineName = week?.program.name ?? 'Spottr';
   const locationName = location?.name ?? 'No location';
   const lastExportRelative = status?.lastOk ? formatRelative(status.lastOk.timestamp) : null;
 
