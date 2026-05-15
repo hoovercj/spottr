@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -35,6 +36,7 @@ import { seedFakeHistory } from '@/data/fakeHistory';
 export function Settings() {
   const status = useExportStatus();
   const userSettings = useUserSettings();
+  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -291,6 +293,23 @@ export function Settings() {
               {fakeInfo}
             </Typography>
           )}
+
+          <Divider sx={{ my: 1 }} />
+
+          <Typography variant="h2">Legal</Typography>
+          <Stack direction="row" spacing={2}>
+            <Button
+              variant="text"
+              size="small"
+              onClick={() => void navigate('/privacy')}
+              sx={{ ml: -1 }}
+            >
+              Privacy Policy
+            </Button>
+            <Button variant="text" size="small" onClick={() => void navigate('/terms')}>
+              Terms of Service
+            </Button>
+          </Stack>
 
           <Divider sx={{ my: 1 }} />
 

@@ -27,6 +27,8 @@ const RoutineEdit = lazy(() =>
   import('@/routes/RoutineEdit').then((m) => ({ default: m.RoutineEdit })),
 );
 const Progress = lazy(() => import('@/routes/Progress').then((m) => ({ default: m.Progress })));
+const Privacy = lazy(() => import('@/routes/Privacy').then((m) => ({ default: m.Privacy })));
+const Terms = lazy(() => import('@/routes/Terms').then((m) => ({ default: m.Terms })));
 
 const BASE = '/spottr/';
 
@@ -68,6 +70,10 @@ export const router = createBrowserRouter(
       path: '/onboarding',
       element: <OnboardingRedirectIfDone />,
     },
+    // Public-by-design routes — must be reachable without onboarding so the
+    // OAuth consent screen can link to them.
+    { path: '/privacy', element: lazyRoute(<Privacy />) },
+    { path: '/terms', element: lazyRoute(<Terms />) },
     {
       element: <OnboardingGate />,
       children: [

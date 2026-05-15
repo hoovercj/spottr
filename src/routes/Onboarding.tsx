@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Box, Button, Divider, Stack, Typography } from '@mui/material';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Box, Button, Divider, Link, Stack, Typography } from '@mui/material';
 import {
   chooseDownloadFallback,
   chooseLocalDirectory,
@@ -124,6 +124,16 @@ export function Onboarding() {
         <Button onClick={() => void pickDownload()} disabled={busy} fullWidth variant="text">
           Save backups to my downloads folder
         </Button>
+
+        <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', mt: 1 }}>
+          <Link component={RouterLink} to="/privacy" underline="hover">
+            Privacy
+          </Link>
+          {' · '}
+          <Link component={RouterLink} to="/terms" underline="hover">
+            Terms
+          </Link>
+        </Typography>
       </Stack>
     </Box>
   );

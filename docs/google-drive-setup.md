@@ -34,8 +34,8 @@ If `VITE_GOOGLE_OAUTH_CLIENT_ID` is unset at build time, the Drive option is hid
    - App logo: optional (skip for now)
 4. **App domain**:
    - Application home page: `https://hoovercj.github.io/spottr/`
-   - Application privacy policy: needed for verification; you can punt with `https://hoovercj.github.io/spottr/` until then.
-   - Application terms of service: same.
+   - Application privacy policy: `https://hoovercj.github.io/spottr/privacy`
+   - Application terms of service: `https://hoovercj.github.io/spottr/terms`
 5. **Authorized domains**: add `github.io`.
 6. **Developer contact information**: your email.
 7. Save and continue.
