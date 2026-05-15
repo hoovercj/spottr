@@ -1,6 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getDb } from '@/data/db';
-import { livingRow, livingRows } from '@/data/softDelete';
 import type {
   Program,
   ScheduleSlot,
@@ -33,45 +32,45 @@ export function useProgramDetail(programId: string | null): ProgramDetail | null
   return useLiveQuery(async () => {
     if (!programId) return null;
     const db = getDb();
-    // Tombstoned rows leak otherwise and end up rendering as "deleted but
-    // visible" — most painfully, a soft-deleted SlotPlanSupersetGroup still
-    // showing up as an active superset card. Filter at the read boundary.
-    const program = livingRow(await db.program.get(programId));
+    // All reads go through `db.live.*` so tombstones can't leak into the
+    // detail view (a soft-deleted SlotPlanSupersetGroup would otherwise
+    // render as an active superset card on the editor).
+    const program = await db.live.program.get(programId);
     if (!program) return null;
-    const slots = livingRows(
-      await db.scheduleSlot.where('programId').equals(programId).sortBy('orderIndex'),
-    );
-    const sdts = livingRows(await db.splitDayType.where('programId').equals(programId).toArray());
+    const slots = await db.live.scheduleSlot
+      .where('programId')
+      .equals(programId)
+      .sortBy('orderIndex');
+    const sdts = await db.live.splitDayType.where('programId').equals(programId).toArray();
     const sdtById = new Map(sdts.map((s) => [s.id, s]));
     const out: SlotDetail[] = [];
     for (const slot of slots) {
       const sdt = sdtById.get(slot.splitDayTypeId);
       if (!sdt) continue;
-      const plans = livingRows(
-        await db.slotPlan.where('scheduleSlotId').equals(slot.id).sortBy('orderIndex'),
-      );
-      const families = await db.liftFamily.bulkGet(plans.map((p) => p.liftFamilyId));
+      const plans = await db.live.slotPlan
+        .where('scheduleSlotId')
+        .equals(slot.id)
+        .sortBy('orderIndex');
+      const families = await db.live.liftFamily.bulkGet(plans.map((p) => p.liftFamilyId));
       const variantIds = plans
         .map((p) => p.defaultVariantId)
         .filter((id): id is string => Boolean(id));
-      const variants = await db.variant.bulkGet(variantIds);
+      const variants = await db.live.variant.bulkGet(variantIds);
       const variantById = new Map(
-        variants
-          .map((v) => livingRow(v))
-          .filter((v): v is NonNullable<typeof v> => Boolean(v))
-          .map((v) => [v.id, v]),
+        variants.filter((v): v is NonNullable<typeof v> => Boolean(v)).map((v) => [v.id, v]),
       );
       const rows: SlotPlanRow[] = plans.map((p, idx) => {
-        const family = livingRow(families[idx] ?? undefined);
+        const family = families[idx] ?? null;
         return {
           slotPlan: p,
           liftFamilyName: family?.name ?? '(exercise)',
           variant: p.defaultVariantId ? (variantById.get(p.defaultVariantId) ?? null) : null,
         };
       });
-      const supersetGroups = livingRows(
-        await db.slotPlanSupersetGroup.where('scheduleSlotId').equals(slot.id).sortBy('orderIndex'),
-      );
+      const supersetGroups = await db.live.slotPlanSupersetGroup
+        .where('scheduleSlotId')
+        .equals(slot.id)
+        .sortBy('orderIndex');
       out.push({ slot, splitDayType: sdt, plans: rows, supersetGroups });
     }
     return { program, slots: out };

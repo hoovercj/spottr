@@ -10,7 +10,6 @@
 import { getDb } from '@/data/db';
 import { newId, nowIso } from '@/data/ids';
 import { withWorkoutWriteLock } from '@/data/locks';
-import { softDelete, softDeleteMany } from '@/data/softDelete';
 import type {
   PlannedSet,
   ScheduleSlot,
@@ -184,15 +183,8 @@ export async function removeSessionLift(input: RemoveLiftInput): Promise<void> {
       [db.sessionLift, db.sessionSet, db.slotPlan, db.scheduleSlot, db.splitDayType],
       async () => {
         // Delete the session-side records always.
-        const sets = await db.sessionSet
-          .where('sessionLiftId')
-          .equals(input.sessionLiftId)
-          .toArray();
-        await softDeleteMany(
-          db.sessionSet,
-          sets.map((s) => s.id),
-        );
-        await softDelete(db.sessionLift, input.sessionLiftId);
+        await db.live.sessionSet.where('sessionLiftId').equals(input.sessionLiftId).softDeleteAll();
+        await db.live.sessionLift.softDelete(input.sessionLiftId);
 
         // Apply programming change for slot/splitDayType scopes.
         if (input.scope === 'session') return;
@@ -204,12 +196,12 @@ export async function removeSessionLift(input: RemoveLiftInput): Promise<void> {
             : [session.scheduleSlotId];
 
         for (const sid of slotsToMutate) {
-          const plan = await db.slotPlan
+          const plan = await db.live.slotPlan
             .where('scheduleSlotId')
             .equals(sid)
             .and((p) => p.liftFamilyId === lift.liftFamilyId)
             .first();
-          if (plan) await softDelete(db.slotPlan, plan.id);
+          if (plan) await db.live.slotPlan.softDelete(plan.id);
         }
       },
     );

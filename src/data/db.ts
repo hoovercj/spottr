@@ -1,5 +1,5 @@
 import Dexie from 'dexie';
-import type { EntityTable } from 'dexie';
+import type { EntityTable, Table } from 'dexie';
 import type {
   CardioEntry,
   LiftFamily,
@@ -18,6 +18,7 @@ import type {
   StretchEntry,
   Variant,
 } from '@/data/types';
+import { LiveTable } from '@/data/liveTable';
 
 export const SCHEMA_VERSION = 2;
 
@@ -65,6 +66,29 @@ export class SpottrDB extends Dexie {
   cardioEntry!: EntityTable<CardioEntry, 'id'>;
   stretchEntry!: EntityTable<StretchEntry, 'id'>;
   migrationLog!: EntityTable<MigrationLogEntry, 'id'>;
+
+  /**
+   * Tombstone-aware read + soft-delete API. User-visible queries should
+   * reach for `db.live.X` instead of `db.X` so deleted rows can't leak.
+   * The raw `db.X` table stays accessible for mutation actions that
+   * intentionally need to see tombstones.
+   */
+  live!: {
+    liftFamily: LiveTable<LiftFamily>;
+    variant: LiveTable<Variant>;
+    location: LiveTable<Location>;
+    program: LiveTable<Program>;
+    splitDayType: LiveTable<SplitDayType>;
+    scheduleSlot: LiveTable<ScheduleSlot>;
+    slotPlan: LiveTable<SlotPlan>;
+    slotPlanSupersetGroup: LiveTable<SlotPlanSupersetGroup>;
+    locationSupersetMemory: LiveTable<LocationSupersetMemory>;
+    session: LiveTable<Session>;
+    sessionLift: LiveTable<SessionLift>;
+    sessionSet: LiveTable<SessionSet>;
+    cardioEntry: LiveTable<CardioEntry>;
+    stretchEntry: LiveTable<StretchEntry>;
+  };
 
   // IDB databases are keyed by name; changing this orphans any prior
   // `workout-buddy` database (data is still in browser storage but no
@@ -152,6 +176,32 @@ export class SpottrDB extends Dexie {
         return undefined;
       });
     }
+
+    // Build the tombstone-aware read API after the schema is declared so
+    // every table reference is bound. EntityTable narrows the `id` field
+    // type, but LiveTable just needs the shared shape — cast away the
+    // narrowing once at the boundary.
+    type AsT<T> = Table<T>;
+    this.live = {
+      liftFamily: new LiveTable(this.liftFamily as unknown as AsT<LiftFamily>),
+      variant: new LiveTable(this.variant as unknown as AsT<Variant>),
+      location: new LiveTable(this.location as unknown as AsT<Location>),
+      program: new LiveTable(this.program as unknown as AsT<Program>),
+      splitDayType: new LiveTable(this.splitDayType as unknown as AsT<SplitDayType>),
+      scheduleSlot: new LiveTable(this.scheduleSlot as unknown as AsT<ScheduleSlot>),
+      slotPlan: new LiveTable(this.slotPlan as unknown as AsT<SlotPlan>),
+      slotPlanSupersetGroup: new LiveTable(
+        this.slotPlanSupersetGroup as unknown as AsT<SlotPlanSupersetGroup>,
+      ),
+      locationSupersetMemory: new LiveTable(
+        this.locationSupersetMemory as unknown as AsT<LocationSupersetMemory>,
+      ),
+      session: new LiveTable(this.session as unknown as AsT<Session>),
+      sessionLift: new LiveTable(this.sessionLift as unknown as AsT<SessionLift>),
+      sessionSet: new LiveTable(this.sessionSet as unknown as AsT<SessionSet>),
+      cardioEntry: new LiveTable(this.cardioEntry as unknown as AsT<CardioEntry>),
+      stretchEntry: new LiveTable(this.stretchEntry as unknown as AsT<StretchEntry>),
+    };
   }
 }
 

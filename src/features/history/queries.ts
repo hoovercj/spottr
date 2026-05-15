@@ -18,9 +18,7 @@ export interface CompletedSessionView {
 export function useCompletedSessions(): CompletedSessionView[] | undefined {
   return useLiveQuery(async () => {
     const db = getDb();
-    const sessions = (await db.session.where('state').equals('COMPLETED').toArray()).filter(
-      (s) => !s.deletedAt,
-    );
+    const sessions = await db.live.session.where('state').equals('COMPLETED').toArray();
     sessions.sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
     const results: CompletedSessionView[] = [];
     for (const session of sessions) {
@@ -29,16 +27,12 @@ export function useCompletedSessions(): CompletedSessionView[] | undefined {
         : null;
       const sdt = slot ? await db.splitDayType.get(slot.splitDayTypeId) : null;
       const location = await db.location.get(session.locationId);
-      const lifts = (await db.sessionLift.where('sessionId').equals(session.id).toArray()).filter(
-        (l) => !l.deletedAt,
-      );
+      const lifts = await db.live.sessionLift.where('sessionId').equals(session.id).toArray();
       const liftIds = lifts.map((l) => l.id);
       let loggedCount = 0;
       let plannedCount = 0;
       for (const lid of liftIds) {
-        const sets = (await db.sessionSet.where('sessionLiftId').equals(lid).toArray()).filter(
-          (s) => !s.deletedAt,
-        );
+        const sets = await db.live.sessionSet.where('sessionLiftId').equals(lid).toArray();
         plannedCount += sets.length;
         loggedCount += sets.filter((s) => s.loggedAt).length;
       }

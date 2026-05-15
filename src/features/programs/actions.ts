@@ -11,7 +11,6 @@ import { getDb } from '@/data/db';
 import { mostRecentMonday } from '@/data/calendarDate';
 import { newId, nowIso } from '@/data/ids';
 import { withWorkoutWriteLock } from '@/data/locks';
-import { softDelete, softDeleteCollection } from '@/data/softDelete';
 import type {
   PlannedSet,
   Program,
@@ -172,7 +171,7 @@ export async function removeSlotPlan(slotPlanId: string): Promise<void> {
   await withWorkoutWriteLock(async () => {
     await db.transaction('rw', [db.slotPlan, db.slotPlanSupersetGroup], async () => {
       const plan = await db.slotPlan.get(slotPlanId);
-      await softDelete(db.slotPlan, slotPlanId);
+      await db.live.slotPlan.softDelete(slotPlanId);
       if (!plan) return;
       // Cascade: any superset group on this slot that contained this plan
       // gets its membership rewritten. Groups that fall below 2 surviving
@@ -185,7 +184,7 @@ export async function removeSlotPlan(slotPlanId: string): Promise<void> {
         if (!g.slotPlanIds.includes(slotPlanId)) continue;
         const remaining = g.slotPlanIds.filter((id) => id !== slotPlanId);
         if (remaining.length < 2) {
-          await softDelete(db.slotPlanSupersetGroup, g.id);
+          await db.live.slotPlanSupersetGroup.softDelete(g.id);
         } else {
           await db.slotPlanSupersetGroup.update(g.id, { slotPlanIds: remaining });
         }
@@ -237,7 +236,7 @@ export async function createSlotSupersetGroup(input: {
       );
       for (const g of toAbsorb) {
         for (const id of g.slotPlanIds) selectedIdSet.add(id);
-        await softDelete(db.slotPlanSupersetGroup, g.id);
+        await db.live.slotPlanSupersetGroup.softDelete(g.id);
       }
 
       const memberIds = plans.filter((p) => selectedIdSet.has(p.id)).map((p) => p.id);
@@ -260,7 +259,7 @@ export async function createSlotSupersetGroup(input: {
 
 export async function removeSlotSupersetGroup(groupId: string): Promise<void> {
   await withWorkoutWriteLock(async () => {
-    await softDelete(getDb().slotPlanSupersetGroup, groupId);
+    await getDb().live.slotPlanSupersetGroup.softDelete(groupId);
   });
 }
 
@@ -276,20 +275,11 @@ export async function deleteProgram(programId: string): Promise<void> {
         if (program.isActive) throw new Error('Cannot delete the active routine');
         const slots = await db.scheduleSlot.where('programId').equals(programId).toArray();
         const slotIds = slots.map((s) => s.id);
-        await softDeleteCollection(db.slotPlan, db.slotPlan.where('scheduleSlotId').anyOf(slotIds));
-        await softDeleteCollection(
-          db.slotPlanSupersetGroup,
-          db.slotPlanSupersetGroup.where('scheduleSlotId').anyOf(slotIds),
-        );
-        await softDeleteCollection(
-          db.scheduleSlot,
-          db.scheduleSlot.where('programId').equals(programId),
-        );
-        await softDeleteCollection(
-          db.splitDayType,
-          db.splitDayType.where('programId').equals(programId),
-        );
-        await softDelete(db.program, programId);
+        await db.live.slotPlan.where('scheduleSlotId').anyOf(slotIds).softDeleteAll();
+        await db.live.slotPlanSupersetGroup.where('scheduleSlotId').anyOf(slotIds).softDeleteAll();
+        await db.live.scheduleSlot.where('programId').equals(programId).softDeleteAll();
+        await db.live.splitDayType.where('programId').equals(programId).softDeleteAll();
+        await db.live.program.softDelete(programId);
       },
     );
   });
@@ -329,23 +319,14 @@ export async function restoreProgramSnapshot(snapshot: ProgramSnapshot): Promise
         const slots = await db.scheduleSlot.where('programId').equals(programId).toArray();
         const slotIds = slots.map((s) => s.id);
         if (slotIds.length > 0) {
-          await softDeleteCollection(
-            db.slotPlan,
-            db.slotPlan.where('scheduleSlotId').anyOf(slotIds),
-          );
-          await softDeleteCollection(
-            db.slotPlanSupersetGroup,
-            db.slotPlanSupersetGroup.where('scheduleSlotId').anyOf(slotIds),
-          );
+          await db.live.slotPlan.where('scheduleSlotId').anyOf(slotIds).softDeleteAll();
+          await db.live.slotPlanSupersetGroup
+            .where('scheduleSlotId')
+            .anyOf(slotIds)
+            .softDeleteAll();
         }
-        await softDeleteCollection(
-          db.scheduleSlot,
-          db.scheduleSlot.where('programId').equals(programId),
-        );
-        await softDeleteCollection(
-          db.splitDayType,
-          db.splitDayType.where('programId').equals(programId),
-        );
+        await db.live.scheduleSlot.where('programId').equals(programId).softDeleteAll();
+        await db.live.splitDayType.where('programId').equals(programId).softDeleteAll();
         await db.program.put(snapshot.program);
         if (snapshot.splitDayTypes.length) await db.splitDayType.bulkPut(snapshot.splitDayTypes);
         if (snapshot.scheduleSlots.length) await db.scheduleSlot.bulkPut(snapshot.scheduleSlots);
@@ -589,13 +570,10 @@ export async function deleteProgramSlot(slotId: string): Promise<void> {
       async () => {
         const slot = await db.scheduleSlot.get(slotId);
         if (!slot) return;
-        await softDeleteCollection(db.slotPlan, db.slotPlan.where('scheduleSlotId').equals(slotId));
-        await softDeleteCollection(
-          db.slotPlanSupersetGroup,
-          db.slotPlanSupersetGroup.where('scheduleSlotId').equals(slotId),
-        );
-        await softDelete(db.scheduleSlot, slotId);
-        await softDelete(db.splitDayType, slot.splitDayTypeId);
+        await db.live.slotPlan.where('scheduleSlotId').equals(slotId).softDeleteAll();
+        await db.live.slotPlanSupersetGroup.where('scheduleSlotId').equals(slotId).softDeleteAll();
+        await db.live.scheduleSlot.softDelete(slotId);
+        await db.live.splitDayType.softDelete(slot.splitDayTypeId);
         const siblings = await db.scheduleSlot
           .where('programId')
           .equals(slot.programId)
