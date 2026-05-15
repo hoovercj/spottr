@@ -1,10 +1,46 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background tile -->
   <rect width="512" height="512" rx="96" fill="#0E0E10"/>
-  <g fill="none" stroke="#3DDC84" stroke-width="32" stroke-linecap="round">
-    <line x1="80"  y1="200" x2="80"  y2="312"/>
-    <line x1="432" y1="200" x2="432" y2="312"/>
-    <line x1="128" y1="160" x2="128" y2="352"/>
-    <line x1="384" y1="160" x2="384" y2="352"/>
-    <line x1="128" y1="256" x2="384" y2="256"/>
+
+  <!-- Head -->
+  <circle cx="256" cy="216" r="124" fill="#3DDC84"/>
+
+  <!-- Ears (outer + inner) -->
+  <circle cx="168" cy="138" r="34" fill="#3DDC84"/>
+  <circle cx="344" cy="138" r="34" fill="#3DDC84"/>
+  <circle cx="168" cy="138" r="14" fill="#0E0E10"/>
+  <circle cx="344" cy="138" r="14" fill="#0E0E10"/>
+
+  <!-- Eyes with a small highlight so it reads as "alert / spotting" -->
+  <circle cx="212" cy="208" r="15" fill="#0E0E10"/>
+  <circle cx="300" cy="208" r="15" fill="#0E0E10"/>
+  <circle cx="216" cy="204" r="4" fill="#3DDC84"/>
+  <circle cx="304" cy="204" r="4" fill="#3DDC84"/>
+
+  <!-- Nose: small triangle -->
+  <path d="M 244 252 L 268 252 L 256 268 Z" fill="#0E0E10"/>
+
+  <!-- Mouth: vertical philtrum + curved smile -->
+  <path d="M 256 268 L 256 282 M 232 288 Q 256 304 280 288"
+        stroke="#0E0E10" stroke-width="5" fill="none"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Whiskers, three pairs -->
+  <g stroke="#0E0E10" stroke-width="4" stroke-linecap="round" fill="none">
+    <line x1="152" y1="260" x2="206" y2="266"/>
+    <line x1="152" y1="282" x2="206" y2="280"/>
+    <line x1="306" y1="266" x2="360" y2="260"/>
+    <line x1="306" y1="280" x2="360" y2="282"/>
   </g>
+
+  <!-- Paws gripping the bar -->
+  <circle cx="172" cy="398" r="28" fill="#3DDC84"/>
+  <circle cx="340" cy="398" r="28" fill="#3DDC84"/>
+
+  <!-- Barbell — kept inside the maskable 80% safe zone (x: 51-461) -->
+  <rect x="120" y="388" width="272" height="20" rx="10" fill="#3DDC84"/>
+  <rect x="98"  y="368" width="32"  height="60" rx="8"  fill="#3DDC84"/>
+  <rect x="382" y="368" width="32"  height="60" rx="8"  fill="#3DDC84"/>
+  <rect x="68"  y="382" width="28"  height="32" rx="6"  fill="#3DDC84"/>
+  <rect x="416" y="382" width="28"  height="32" rx="6"  fill="#3DDC84"/>
 </svg>

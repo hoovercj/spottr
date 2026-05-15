@@ -66,7 +66,12 @@ export default tseslint.config(
   // parser so `as const`, `import type`, etc. parse cleanly — but skip the
   // type-aware rule set since these files aren't in a tsconfig project.
   {
-    files: ['*.{js,ts,cjs,mjs}', 'vite.config.ts', 'playwright.config.ts'],
+    files: [
+      '*.{js,ts,cjs,mjs}',
+      'vite.config.ts',
+      'playwright.config.ts',
+      'scripts/**/*.{js,mjs,ts}',
+    ],
     languageOptions: {
       parser: tseslint.parser,
       ecmaVersion: 2022,

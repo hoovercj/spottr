@@ -49,7 +49,7 @@ export default defineConfig({
         skipWaiting: false,
         navigateFallback: `${APP_BASE}index.html`,
         cleanupOutdatedCaches: true,
-        globPatterns: ['**/*.{js,css,html,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
       },
       manifest: {
         name: 'Spottr',
@@ -61,12 +61,35 @@ export default defineConfig({
         orientation: 'portrait',
         background_color: '#0E0E10',
         theme_color: '#0E0E10',
+        // SVG covers modern Chrome/Edge/Firefox/Safari 17+. PNGs are listed
+        // for Android Chrome's install path (it rasterizes the chosen size
+        // ahead of time) and to give iOS something tangible to read even
+        // though it generally ignores the manifest and uses
+        // <link rel="apple-touch-icon"> from index.html.
         icons: [
           {
             src: 'icon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
             purpose: 'any maskable',
+          },
+          {
+            src: 'pwa-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+          {
+            src: 'pwa-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+          {
+            src: 'apple-touch-icon.png',
+            sizes: '180x180',
+            type: 'image/png',
+            purpose: 'any',
           },
         ],
       },
