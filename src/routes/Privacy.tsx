@@ -13,9 +13,9 @@ export function Privacy() {
       <Typography variant="h2">What Spottr stores</Typography>
       <Typography variant="body1">
         Spottr records the workout data you enter — exercises, sets, reps, weights, notes,
-        timestamps, locations, and the routines you create. Everything is written to your browser's
-        IndexedDB. Spottr does not require an account and does not transmit your data to any server
-        operated by the app's authors.
+        timestamps, location names (not GPS!), and the routines you create. Everything is written to
+        your browser's IndexedDB. Spottr does not require an account and does not transmit your data
+        to any server operated by the app's authors.
       </Typography>
 
       <Typography variant="h2">Backups</Typography>
