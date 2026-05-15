@@ -199,9 +199,23 @@ interface CellButtonProps {
   ariaLabel: string;
 }
 
+// Layout for the cell — identical in both states so the row height
+// doesn't twitch when the user toggles a set from unlogged to logged.
+// Only the wrapping element (button vs. div) and the focus/cursor styles
+// change with `disabled`.
+const CELL_LAYOUT_SX = {
+  px: 0.5,
+  py: 1,
+  minHeight: 56,
+  display: 'flex',
+  alignItems: 'center',
+  flex: 1,
+  color: 'text.primary',
+} as const;
+
 function CellButton({ children, onClick, disabled, ariaLabel }: CellButtonProps) {
   if (disabled) {
-    return <Box sx={{ px: 0.5, py: 1, color: 'text.primary' }}>{children}</Box>;
+    return <Box sx={CELL_LAYOUT_SX}>{children}</Box>;
   }
   return (
     <Box
@@ -211,15 +225,9 @@ function CellButton({ children, onClick, disabled, ariaLabel }: CellButtonProps)
       aria-label={ariaLabel}
       sx={{
         all: 'unset',
-        px: 0.5,
-        py: 1,
+        ...CELL_LAYOUT_SX,
         cursor: 'pointer',
-        color: 'text.primary',
         textAlign: 'left',
-        minHeight: 56,
-        display: 'flex',
-        alignItems: 'center',
-        flex: 1,
         '&:focus-visible': {
           outline: '2px solid',
           outlineColor: 'primary.main',
