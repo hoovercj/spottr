@@ -7,6 +7,30 @@
 
 export type Iso8601 = string;
 
+/**
+ * Per-row sync metadata, mixed into every store the multi-device Drive
+ * merge touches. `updatedAt` is stamped automatically by Dexie hooks on
+ * every insert/update; `deletedAt`, when set, marks the row as a tombstone
+ * so the delete propagates across devices without being silently
+ * resurrected by a stale push.
+ *
+ * `meta` and `migrationLog` deliberately do NOT carry these fields: meta is
+ * per-device settings (local always wins), and the migration log is a
+ * per-device journal.
+ */
+export interface SyncFields {
+  /**
+   * Stamped automatically by the Dexie `creating`/`updating` hooks (see
+   * `src/data/db.ts`). Optional in the type so call sites don't have to
+   * remember it; the merge function falls back to `createdAt` then ""
+   * when the field is missing (e.g. payloads from a v1 build that never
+   * ran the v2 upgrade).
+   */
+  updatedAt?: Iso8601;
+  /** When non-null, the row is a tombstone. Read-paths filter these out. */
+  deletedAt?: Iso8601;
+}
+
 export type Units = 'lb' | 'kg';
 
 /** Conventional plate increment per unit (PRD §FR39). */
@@ -45,14 +69,14 @@ export const DEFAULT_IS_FREE_WEIGHT: Record<EquipmentKind, boolean> = {
   custom: false, // forces explicit user choice on creation
 };
 
-export interface LiftFamily {
+export interface LiftFamily extends SyncFields {
   id: string;
   name: string;
   isCustom: boolean;
   createdAt: Iso8601;
 }
 
-export interface Variant {
+export interface Variant extends SyncFields {
   id: string;
   liftFamilyId: string;
   name: string;
@@ -65,7 +89,7 @@ export interface Variant {
   createdAt: Iso8601;
 }
 
-export interface Location {
+export interface Location extends SyncFields {
   id: string;
   name: string;
   /**
@@ -77,7 +101,7 @@ export interface Location {
   createdAt: Iso8601;
 }
 
-export interface Program {
+export interface Program extends SyncFields {
   id: string;
   name: string;
   isActive: boolean;
@@ -100,7 +124,7 @@ export interface Program {
  * Named split-day type within a program (e.g., "Push", "Pull", "Legs", "Rest").
  * User-named, never enum (UX spec §Program-Shape Neutrality).
  */
-export interface SplitDayType {
+export interface SplitDayType extends SyncFields {
   id: string;
   programId: string;
   name: string;
@@ -108,7 +132,7 @@ export interface SplitDayType {
   isRest: boolean;
 }
 
-export interface ScheduleSlot {
+export interface ScheduleSlot extends SyncFields {
   id: string;
   programId: string;
   orderIndex: number;
@@ -123,7 +147,7 @@ export interface PlannedSet {
   plannedRepsMax: number;
 }
 
-export interface SlotPlan {
+export interface SlotPlan extends SyncFields {
   id: string;
   scheduleSlotId: string;
   orderIndex: number;
@@ -133,7 +157,7 @@ export interface SlotPlan {
 }
 
 /** Programmed superset group within a schedule slot (FR16). */
-export interface SlotPlanSupersetGroup {
+export interface SlotPlanSupersetGroup extends SyncFields {
   id: string;
   scheduleSlotId: string;
   slotPlanIds: string[];
@@ -141,7 +165,7 @@ export interface SlotPlanSupersetGroup {
 }
 
 /** Ad-hoc superset memory per location (FR33). */
-export interface LocationSupersetMemory {
+export interface LocationSupersetMemory extends SyncFields {
   id: string;
   locationId: string;
   liftFamilyIdA: string;
@@ -151,7 +175,7 @@ export interface LocationSupersetMemory {
 
 export type SessionState = 'ACTIVE' | 'COMPLETED';
 
-export interface Session {
+export interface Session extends SyncFields {
   id: string;
   /**
    * Optional. Absent for ad-hoc workouts that aren't tied to a routine
@@ -175,7 +199,7 @@ export interface Session {
 
 export type SessionLiftScope = 'planned' | 'session-only' | 'permanent-slot' | 'permanent-type';
 
-export interface SessionLift {
+export interface SessionLift extends SyncFields {
   id: string;
   sessionId: string;
   liftFamilyId: string;
@@ -188,7 +212,7 @@ export interface SessionLift {
   supersetGroupId?: string;
 }
 
-export interface SessionSet {
+export interface SessionSet extends SyncFields {
   id: string;
   sessionLiftId: string;
   /** Denormalized for the (variant, rep_range) compound index. */
@@ -211,7 +235,7 @@ export type CardioModality =
   | 'outdoor-run'
   | 'rowing-erg';
 
-export interface CardioEntry {
+export interface CardioEntry extends SyncFields {
   id: string;
   sessionId: string;
   modality: CardioModality;
@@ -220,7 +244,7 @@ export interface CardioEntry {
   loggedAt: Iso8601;
 }
 
-export interface StretchEntry {
+export interface StretchEntry extends SyncFields {
   id: string;
   sessionId: string;
   done: boolean;

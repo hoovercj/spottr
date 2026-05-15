@@ -17,6 +17,7 @@ import { getDb } from '@/data/db';
 import { todayLocalDateString } from '@/data/calendarDate';
 import { newId, nowIso } from '@/data/ids';
 import { withWorkoutWriteLock } from '@/data/locks';
+import { softDelete, softDeleteMany } from '@/data/softDelete';
 import type { PlannedSet, Session, SessionLift, SessionSet, SlotPlan } from '@/data/types';
 import { runExport } from '@/features/export/service';
 
@@ -227,7 +228,7 @@ export async function addSessionSet(sessionLiftId: string): Promise<{ sessionSet
 export async function deleteSessionSet(sessionSetId: string): Promise<void> {
   const db = getDb();
   await withWorkoutWriteLock(async () => {
-    await db.sessionSet.delete(sessionSetId);
+    await softDelete(db.sessionSet, sessionSetId);
   });
 }
 
@@ -250,14 +251,23 @@ export async function discardSession(sessionId: string): Promise<void> {
         const liftIds = lifts.map((l) => l.id);
         if (liftIds.length > 0) {
           const setRows = await db.sessionSet.where('sessionLiftId').anyOf(liftIds).toArray();
-          await db.sessionSet.bulkDelete(setRows.map((s) => s.id));
+          await softDeleteMany(
+            db.sessionSet,
+            setRows.map((s) => s.id),
+          );
         }
-        await db.sessionLift.bulkDelete(liftIds);
+        await softDeleteMany(db.sessionLift, liftIds);
         const cardios = await db.cardioEntry.where('sessionId').equals(sessionId).toArray();
-        await db.cardioEntry.bulkDelete(cardios.map((c) => c.id));
+        await softDeleteMany(
+          db.cardioEntry,
+          cardios.map((c) => c.id),
+        );
         const stretches = await db.stretchEntry.where('sessionId').equals(sessionId).toArray();
-        await db.stretchEntry.bulkDelete(stretches.map((s) => s.id));
-        await db.session.delete(sessionId);
+        await softDeleteMany(
+          db.stretchEntry,
+          stretches.map((s) => s.id),
+        );
+        await softDelete(db.session, sessionId);
       },
     );
   });

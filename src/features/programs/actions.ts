@@ -11,6 +11,7 @@ import { getDb } from '@/data/db';
 import { mostRecentMonday } from '@/data/calendarDate';
 import { newId, nowIso } from '@/data/ids';
 import { withWorkoutWriteLock } from '@/data/locks';
+import { softDelete, softDeleteCollection } from '@/data/softDelete';
 import type {
   PlannedSet,
   Program,
@@ -167,8 +168,29 @@ export async function addSlotPlan(input: AddSlotPlanInput): Promise<{ slotPlanId
 }
 
 export async function removeSlotPlan(slotPlanId: string): Promise<void> {
+  const db = getDb();
   await withWorkoutWriteLock(async () => {
-    await getDb().slotPlan.delete(slotPlanId);
+    await db.transaction('rw', [db.slotPlan, db.slotPlanSupersetGroup], async () => {
+      const plan = await db.slotPlan.get(slotPlanId);
+      await softDelete(db.slotPlan, slotPlanId);
+      if (!plan) return;
+      // Cascade: any superset group on this slot that contained this plan
+      // gets its membership rewritten. Groups that fall below 2 surviving
+      // members are deleted entirely — a superset of one isn't a superset.
+      const groups = await db.slotPlanSupersetGroup
+        .where('scheduleSlotId')
+        .equals(plan.scheduleSlotId)
+        .toArray();
+      for (const g of groups) {
+        if (!g.slotPlanIds.includes(slotPlanId)) continue;
+        const remaining = g.slotPlanIds.filter((id) => id !== slotPlanId);
+        if (remaining.length < 2) {
+          await softDelete(db.slotPlanSupersetGroup, g.id);
+        } else {
+          await db.slotPlanSupersetGroup.update(g.id, { slotPlanIds: remaining });
+        }
+      }
+    });
   });
 }
 
@@ -178,6 +200,67 @@ export async function updateSlotPlanSets(
 ): Promise<void> {
   await withWorkoutWriteLock(async () => {
     await getDb().slotPlan.update(slotPlanId, { plannedSets });
+  });
+}
+
+/**
+ * Groups two or more slotPlans into a superset on this slot. If any of
+ * the selected slotPlans already belong to a superset on the same slot,
+ * those groups are merged into one (the user's intent is "these all go
+ * together"). The result group's orderIndex follows the lowest existing
+ * slotPlan orderIndex among its members so it renders in-place.
+ */
+export async function createSlotSupersetGroup(input: {
+  scheduleSlotId: string;
+  slotPlanIds: string[];
+}): Promise<{ groupId: string } | null> {
+  if (input.slotPlanIds.length < 2) return null;
+  const db = getDb();
+  return withWorkoutWriteLock(async () => {
+    return db.transaction('rw', [db.slotPlan, db.slotPlanSupersetGroup], async () => {
+      const plans = await db.slotPlan
+        .where('scheduleSlotId')
+        .equals(input.scheduleSlotId)
+        .sortBy('orderIndex');
+      const selected = plans.filter((p) => input.slotPlanIds.includes(p.id));
+      if (selected.length < 2) return null;
+
+      // Pull in any plans that already share a group with one of our
+      // selections, so the merge keeps each existing group intact.
+      const existingGroups = await db.slotPlanSupersetGroup
+        .where('scheduleSlotId')
+        .equals(input.scheduleSlotId)
+        .toArray();
+      const selectedIdSet = new Set(input.slotPlanIds);
+      const toAbsorb = existingGroups.filter((g) =>
+        g.slotPlanIds.some((id) => selectedIdSet.has(id)),
+      );
+      for (const g of toAbsorb) {
+        for (const id of g.slotPlanIds) selectedIdSet.add(id);
+        await softDelete(db.slotPlanSupersetGroup, g.id);
+      }
+
+      const memberIds = plans.filter((p) => selectedIdSet.has(p.id)).map((p) => p.id);
+      // orderIndex of the new group = the smallest existing slotPlan
+      // orderIndex among its members. Other groups (or this group as a
+      // pure-virtual sort key) sort by this same field.
+      const firstMemberOrder = plans.find((p) => selectedIdSet.has(p.id))?.orderIndex ?? 0;
+      const newGroup: SlotPlanSupersetGroup = {
+        id: newId(),
+        scheduleSlotId: input.scheduleSlotId,
+        slotPlanIds: memberIds,
+        orderIndex: firstMemberOrder,
+        updatedAt: nowIso(),
+      };
+      await db.slotPlanSupersetGroup.put(newGroup);
+      return { groupId: newGroup.id };
+    });
+  });
+}
+
+export async function removeSlotSupersetGroup(groupId: string): Promise<void> {
+  await withWorkoutWriteLock(async () => {
+    await softDelete(getDb().slotPlanSupersetGroup, groupId);
   });
 }
 
@@ -193,11 +276,20 @@ export async function deleteProgram(programId: string): Promise<void> {
         if (program.isActive) throw new Error('Cannot delete the active routine');
         const slots = await db.scheduleSlot.where('programId').equals(programId).toArray();
         const slotIds = slots.map((s) => s.id);
-        await db.slotPlan.where('scheduleSlotId').anyOf(slotIds).delete();
-        await db.slotPlanSupersetGroup.where('scheduleSlotId').anyOf(slotIds).delete();
-        await db.scheduleSlot.where('programId').equals(programId).delete();
-        await db.splitDayType.where('programId').equals(programId).delete();
-        await db.program.delete(programId);
+        await softDeleteCollection(db.slotPlan, db.slotPlan.where('scheduleSlotId').anyOf(slotIds));
+        await softDeleteCollection(
+          db.slotPlanSupersetGroup,
+          db.slotPlanSupersetGroup.where('scheduleSlotId').anyOf(slotIds),
+        );
+        await softDeleteCollection(
+          db.scheduleSlot,
+          db.scheduleSlot.where('programId').equals(programId),
+        );
+        await softDeleteCollection(
+          db.splitDayType,
+          db.splitDayType.where('programId').equals(programId),
+        );
+        await softDelete(db.program, programId);
       },
     );
   });
@@ -237,11 +329,23 @@ export async function restoreProgramSnapshot(snapshot: ProgramSnapshot): Promise
         const slots = await db.scheduleSlot.where('programId').equals(programId).toArray();
         const slotIds = slots.map((s) => s.id);
         if (slotIds.length > 0) {
-          await db.slotPlan.where('scheduleSlotId').anyOf(slotIds).delete();
-          await db.slotPlanSupersetGroup.where('scheduleSlotId').anyOf(slotIds).delete();
+          await softDeleteCollection(
+            db.slotPlan,
+            db.slotPlan.where('scheduleSlotId').anyOf(slotIds),
+          );
+          await softDeleteCollection(
+            db.slotPlanSupersetGroup,
+            db.slotPlanSupersetGroup.where('scheduleSlotId').anyOf(slotIds),
+          );
         }
-        await db.scheduleSlot.where('programId').equals(programId).delete();
-        await db.splitDayType.where('programId').equals(programId).delete();
+        await softDeleteCollection(
+          db.scheduleSlot,
+          db.scheduleSlot.where('programId').equals(programId),
+        );
+        await softDeleteCollection(
+          db.splitDayType,
+          db.splitDayType.where('programId').equals(programId),
+        );
         await db.program.put(snapshot.program);
         if (snapshot.splitDayTypes.length) await db.splitDayType.bulkPut(snapshot.splitDayTypes);
         if (snapshot.scheduleSlots.length) await db.scheduleSlot.bulkPut(snapshot.scheduleSlots);
@@ -485,10 +589,13 @@ export async function deleteProgramSlot(slotId: string): Promise<void> {
       async () => {
         const slot = await db.scheduleSlot.get(slotId);
         if (!slot) return;
-        await db.slotPlan.where('scheduleSlotId').equals(slotId).delete();
-        await db.slotPlanSupersetGroup.where('scheduleSlotId').equals(slotId).delete();
-        await db.scheduleSlot.delete(slotId);
-        await db.splitDayType.delete(slot.splitDayTypeId);
+        await softDeleteCollection(db.slotPlan, db.slotPlan.where('scheduleSlotId').equals(slotId));
+        await softDeleteCollection(
+          db.slotPlanSupersetGroup,
+          db.slotPlanSupersetGroup.where('scheduleSlotId').equals(slotId),
+        );
+        await softDelete(db.scheduleSlot, slotId);
+        await softDelete(db.splitDayType, slot.splitDayTypeId);
         const siblings = await db.scheduleSlot
           .where('programId')
           .equals(slot.programId)

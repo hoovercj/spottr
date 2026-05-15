@@ -15,7 +15,7 @@
 
 import { useState } from 'react';
 import { Box, Button, Stack, Typography } from '@mui/material';
-import { restoreFromDriveBackup, useDriveRemoteStatus } from '@/features/export/driveSync';
+import { syncWithDriveBackup, useDriveRemoteStatus } from '@/features/export/driveSync';
 
 export function DriveSyncBanner() {
   const status = useDriveRemoteStatus();
@@ -26,29 +26,27 @@ export function DriveSyncBanner() {
   const showRestorePrompt = status.kind === 'remote-newer' || status.kind === 'no-remote-yet';
   if (!showRestorePrompt || dismissed) return null;
 
-  const onRestore = async () => {
+  const onSync = async () => {
     setBusy(true);
     setError(null);
     try {
-      await restoreFromDriveBackup();
+      await syncWithDriveBackup();
       setDismissed(true);
-      // Hard reload so the React tree picks up the freshly restored DB.
+      // Hard reload so the React tree picks up the freshly merged DB.
       window.location.reload();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not restore from Drive');
+      setError(err instanceof Error ? err.message : 'Could not sync with Drive');
     } finally {
       setBusy(false);
     }
   };
 
   const headline =
-    status.kind === 'remote-newer'
-      ? 'Drive has newer data from another device'
-      : 'Drive backup found';
+    status.kind === 'remote-newer' ? 'Drive has changes from another device' : 'Drive backup found';
   const body =
     status.kind === 'remote-newer'
-      ? "Restoring will replace this device's data with the latest from Drive. Local changes that haven't been pushed yet will be lost."
-      : 'Restore the Drive backup to pull your existing data onto this device.';
+      ? "Sync will merge the other device's changes with this one. Edits made on either side are preserved, deletes propagate, and the result is pushed back to Drive."
+      : 'Pull your existing data onto this device. Future changes here will sync back to Drive.';
 
   return (
     <Box
@@ -77,8 +75,8 @@ export function DriveSyncBanner() {
           <Button size="small" variant="text" onClick={() => setDismissed(true)} disabled={busy}>
             Not now
           </Button>
-          <Button size="small" variant="contained" onClick={() => void onRestore()} disabled={busy}>
-            Restore from Drive
+          <Button size="small" variant="contained" onClick={() => void onSync()} disabled={busy}>
+            Sync with Drive
           </Button>
         </Stack>
       </Stack>

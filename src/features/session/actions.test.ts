@@ -164,8 +164,10 @@ describe('session actions', () => {
     expect(added.orderIndex).toBe(before[before.length - 1]!.orderIndex + 1);
 
     await deleteSessionSet(sessionSetId);
-    const afterDelete = await db.sessionSet.where('sessionLiftId').equals(aLift.id).count();
-    expect(afterDelete).toBe(before.length);
+    const afterDelete = (
+      await db.sessionSet.where('sessionLiftId').equals(aLift.id).toArray()
+    ).filter((s) => !s.deletedAt);
+    expect(afterDelete.length).toBe(before.length);
   });
 
   it('startSession defaults Session.calendarDate to today (YYYY-MM-DD)', async () => {
@@ -214,9 +216,18 @@ describe('session actions', () => {
 
     await discardSession(sessionId);
 
-    expect(await db.session.get(sessionId)).toBeUndefined();
-    expect(await db.sessionLift.where('sessionId').equals(sessionId).count()).toBe(0);
-    expect(await db.sessionSet.where('sessionLiftId').equals(aLift.id).count()).toBe(0);
+    // Soft-delete writes tombstones so deletes can propagate via Drive
+    // merge; check `deletedAt` is set, not that the row is gone.
+    const tombstoned = await db.session.get(sessionId);
+    expect(tombstoned?.deletedAt).toBeTruthy();
+    const liveLifts = (await db.sessionLift.where('sessionId').equals(sessionId).toArray()).filter(
+      (l) => !l.deletedAt,
+    );
+    expect(liveLifts).toHaveLength(0);
+    const liveSets = (await db.sessionSet.where('sessionLiftId').equals(aLift.id).toArray()).filter(
+      (s) => !s.deletedAt,
+    );
+    expect(liveSets).toHaveLength(0);
     const slotAfter = await db.scheduleSlot.get(slot!.id);
     // Discard does NOT bump lastCompletedAt — the slot was never completed.
     expect(slotAfter?.lastCompletedAt).toBeUndefined();

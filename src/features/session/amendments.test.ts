@@ -198,8 +198,14 @@ describe('amendments', () => {
 
     await removeSessionLift({ sessionLiftId: target.id, scope: 'session' });
 
-    expect(await db.sessionLift.get(target.id)).toBeUndefined();
-    expect(await db.sessionSet.where('sessionLiftId').equals(target.id).count()).toBe(0);
+    // Soft-delete leaves a tombstone behind so the delete propagates
+    // across devices via the Drive merge — check deletedAt is set.
+    const tombstoned = await db.sessionLift.get(target.id);
+    expect(tombstoned?.deletedAt).toBeTruthy();
+    const liveSets = (
+      await db.sessionSet.where('sessionLiftId').equals(target.id).toArray()
+    ).filter((s) => !s.deletedAt);
+    expect(liveSets).toHaveLength(0);
     const plansAfter = await db.slotPlan.where('scheduleSlotId').equals(slot.id).count();
     expect(plansAfter).toBe(plansBefore);
     void sessionId;
@@ -233,12 +239,14 @@ describe('amendments', () => {
 
     await removeSessionLift({ sessionLiftId: target.id, scope: 'slot' });
 
-    const plansAfter = await db.slotPlan
-      .where('scheduleSlotId')
-      .equals(slot.id)
-      .and((p) => p.liftFamilyId === target.liftFamilyId)
-      .count();
-    expect(plansAfter).toBe(0);
+    const plansAfter = (
+      await db.slotPlan
+        .where('scheduleSlotId')
+        .equals(slot.id)
+        .and((p) => p.liftFamilyId === target.liftFamilyId)
+        .toArray()
+    ).filter((p) => !p.deletedAt);
+    expect(plansAfter).toHaveLength(0);
   });
 
   it('validRemovalTiersForScope returns expected tier sets per lift scope', () => {

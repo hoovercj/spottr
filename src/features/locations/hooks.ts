@@ -6,7 +6,9 @@ import { useUserSettings } from '@/features/settings/hooks';
 
 export function useAllLocations(): Location[] | undefined {
   return useLiveQuery(async () => {
-    return (await getDb().location.toArray()).sort((a, b) => a.name.localeCompare(b.name));
+    return (await getDb().location.toArray())
+      .filter((l) => !l.deletedAt)
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, []);
 }
 
@@ -14,7 +16,8 @@ export function useCurrentLocation(): Location | null | undefined {
   return useLiveQuery(async () => {
     const id = await getCurrentLocationId();
     if (!id) return null;
-    return (await getDb().location.get(id)) ?? null;
+    const loc = (await getDb().location.get(id)) ?? null;
+    return loc?.deletedAt ? null : loc;
   }, []);
 }
 

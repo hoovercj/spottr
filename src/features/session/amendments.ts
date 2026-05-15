@@ -10,6 +10,7 @@
 import { getDb } from '@/data/db';
 import { newId, nowIso } from '@/data/ids';
 import { withWorkoutWriteLock } from '@/data/locks';
+import { softDelete, softDeleteMany } from '@/data/softDelete';
 import type {
   PlannedSet,
   ScheduleSlot,
@@ -187,8 +188,11 @@ export async function removeSessionLift(input: RemoveLiftInput): Promise<void> {
           .where('sessionLiftId')
           .equals(input.sessionLiftId)
           .toArray();
-        await db.sessionSet.bulkDelete(sets.map((s) => s.id));
-        await db.sessionLift.delete(input.sessionLiftId);
+        await softDeleteMany(
+          db.sessionSet,
+          sets.map((s) => s.id),
+        );
+        await softDelete(db.sessionLift, input.sessionLiftId);
 
         // Apply programming change for slot/splitDayType scopes.
         if (input.scope === 'session') return;
@@ -205,7 +209,7 @@ export async function removeSessionLift(input: RemoveLiftInput): Promise<void> {
             .equals(sid)
             .and((p) => p.liftFamilyId === lift.liftFamilyId)
             .first();
-          if (plan) await db.slotPlan.delete(plan.id);
+          if (plan) await softDelete(db.slotPlan, plan.id);
         }
       },
     );
@@ -247,6 +251,78 @@ export async function recordAdHocSuperset(input: {
       liftFamilyIdA: a,
       liftFamilyIdB: b,
       observedAt: nowIso(),
+    });
+  });
+}
+
+/* ----- Ad-hoc superset grouping at session scope ----- */
+
+/**
+ * Groups two session lifts into a superset. If either is already in a
+ * group, extends that group instead of creating a new one. Both lifts'
+ * already-logged sets retain their values.
+ */
+export async function pairSessionLiftsAsSuperset(input: {
+  liftIdA: string;
+  liftIdB: string;
+}): Promise<void> {
+  if (input.liftIdA === input.liftIdB) return;
+  const db = getDb();
+  await withWorkoutWriteLock(async () => {
+    await db.transaction('rw', [db.sessionLift], async () => {
+      const [a, b] = await Promise.all([
+        db.sessionLift.get(input.liftIdA),
+        db.sessionLift.get(input.liftIdB),
+      ]);
+      if (!a || !b) return;
+      // If either side already has a group, prefer that group's id. If both
+      // do (different groups), merge B's group into A's. Otherwise mint one.
+      const groupId = a.supersetGroupId ?? b.supersetGroupId ?? newId();
+      const updates: { id: string; supersetGroupId: string }[] = [];
+      if (a.supersetGroupId !== groupId) updates.push({ id: a.id, supersetGroupId: groupId });
+      if (b.supersetGroupId !== groupId) updates.push({ id: b.id, supersetGroupId: groupId });
+      if (a.supersetGroupId && b.supersetGroupId && a.supersetGroupId !== b.supersetGroupId) {
+        // Merge: pull everyone in B's old group over to the chosen groupId.
+        // supersetGroupId is not indexed — filter on the session's lifts.
+        const sessionLifts = await db.sessionLift.where('sessionId').equals(a.sessionId).toArray();
+        const others = sessionLifts.filter((l) => l.supersetGroupId === b.supersetGroupId);
+        for (const o of others) updates.push({ id: o.id, supersetGroupId: groupId });
+      }
+      for (const u of updates) {
+        await db.sessionLift.update(u.id, { supersetGroupId: u.supersetGroupId });
+      }
+    });
+  });
+}
+
+/**
+ * Removes the entire superset grouping (every lift in the group becomes
+ * standalone again). Sets in those lifts are untouched.
+ */
+export async function dissolveSessionSuperset(input: {
+  sessionId: string;
+  groupId: string;
+}): Promise<void> {
+  const db = getDb();
+  await withWorkoutWriteLock(async () => {
+    await db.transaction('rw', [db.sessionLift], async () => {
+      // supersetGroupId is not indexed — filter the session's lifts.
+      const sessionLifts = await db.sessionLift
+        .where('sessionId')
+        .equals(input.sessionId)
+        .toArray();
+      const lifts = sessionLifts.filter((l) => l.supersetGroupId === input.groupId);
+      for (const l of lifts) {
+        // `supersetGroupId` is an optional field; Dexie's `update` with
+        // `undefined` is rejected by the exactOptionalPropertyTypes guard,
+        // so delete the key via `modify` for a true field removal.
+        await db.sessionLift
+          .where('id')
+          .equals(l.id)
+          .modify((obj) => {
+            delete obj.supersetGroupId;
+          });
+      }
     });
   });
 }

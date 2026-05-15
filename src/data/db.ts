@@ -19,7 +19,34 @@ import type {
   Variant,
 } from '@/data/types';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
+
+/**
+ * Stores that participate in the multi-device merge. Each row in these
+ * tables carries an `updatedAt` (auto-stamped by the create/update hooks
+ * below) and an optional `deletedAt` (tombstone). `meta` and `migrationLog`
+ * are deliberately excluded — they're per-device state.
+ */
+const MERGEABLE_TABLES = new Set([
+  'liftFamily',
+  'variant',
+  'location',
+  'program',
+  'splitDayType',
+  'scheduleSlot',
+  'slotPlan',
+  'slotPlanSupersetGroup',
+  'locationSupersetMemory',
+  'session',
+  'sessionLift',
+  'sessionSet',
+  'cardioEntry',
+  'stretchEntry',
+]);
+
+export function isMergeableTableName(name: string): boolean {
+  return MERGEABLE_TABLES.has(name);
+}
 
 export class SpottrDB extends Dexie {
   meta!: EntityTable<MetaRow, 'key'>;
@@ -65,6 +92,66 @@ export class SpottrDB extends Dexie {
       stretchEntry: '&id, sessionId',
       migrationLog: '&id, timestamp',
     });
+
+    // v2: per-row updatedAt / deletedAt for multi-device Drive merge.
+    // No index changes (we filter tombstones in-memory and merge by id),
+    // so the stores definition is unchanged. The upgrade callback
+    // backfills updatedAt on every existing row.
+    this.version(2)
+      .stores({
+        meta: '&key',
+        liftFamily: '&id, name, isCustom',
+        variant: '&id, liftFamilyId, [liftFamilyId+name], isAlias',
+        location: '&id, name',
+        program: '&id, isActive',
+        splitDayType: '&id, programId',
+        scheduleSlot: '&id, programId, [programId+orderIndex], splitDayTypeId',
+        slotPlan: '&id, scheduleSlotId, [scheduleSlotId+orderIndex], liftFamilyId',
+        slotPlanSupersetGroup: '&id, scheduleSlotId',
+        locationSupersetMemory: '&id, [locationId+liftFamilyIdA+liftFamilyIdB]',
+        session: '&id, scheduleSlotId, state, startedAt, completedAt',
+        sessionLift: '&id, sessionId, [sessionId+orderIndex], liftFamilyId, variantId',
+        sessionSet:
+          '&id, sessionLiftId, [sessionLiftId+orderIndex], [variantId+plannedRepsMin+plannedRepsMax+loggedAt]',
+        cardioEntry: '&id, sessionId',
+        stretchEntry: '&id, sessionId',
+        migrationLog: '&id, timestamp',
+      })
+      .upgrade(async (tx) => {
+        const now = new Date().toISOString();
+        for (const tableName of MERGEABLE_TABLES) {
+          const tbl = tx.table(tableName);
+          await tbl.toCollection().modify((row: Record<string, unknown>) => {
+            // Prefer createdAt if available — gives a more accurate sort
+            // when two devices both backfill before they meet for the
+            // first time. Fall back to "now" for rows without it.
+            if (!row.updatedAt) row.updatedAt = row.createdAt ?? now;
+          });
+        }
+      });
+
+    // Auto-stamp updatedAt on every insert / update across the mergeable
+    // tables. The hooks fire per row even inside bulk operations.
+    for (const tableName of MERGEABLE_TABLES) {
+      const table = this.table(tableName) as unknown as {
+        hook(ev: 'creating', cb: (pk: string, obj: Record<string, unknown>) => void): void;
+        hook(
+          ev: 'updating',
+          cb: (mods: Record<string, unknown>) => Record<string, unknown> | undefined,
+        ): void;
+      };
+      table.hook('creating', (_pk, obj) => {
+        if (!obj.updatedAt) obj.updatedAt = new Date().toISOString();
+      });
+      table.hook('updating', (mods) => {
+        // Only stamp if the caller didn't already set it (e.g. the merge
+        // path explicitly preserves the remote row's updatedAt).
+        if (mods.updatedAt === undefined) {
+          return { ...mods, updatedAt: new Date().toISOString() };
+        }
+        return undefined;
+      });
+    }
   }
 }
 
