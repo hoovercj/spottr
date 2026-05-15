@@ -373,6 +373,15 @@ function DayCard({
         .join(', ') + (day.plans.length > 3 ? '…' : '');
 
   const dateLabel = day.calendarDate.slice(5).replace('-', '/'); // MM/DD
+  // Today's card gets a long-form date — there's enough room and it reads
+  // far better than the bare MM/DD that fits on the smaller pending cards.
+  const todayDateLabel = isToday
+    ? (() => {
+        const [yearStr, monthStr, dayStr] = day.calendarDate.split('-');
+        const d = new Date(Number(yearStr), Number(monthStr) - 1, Number(dayStr));
+        return new Intl.DateTimeFormat(undefined, { dateStyle: 'full' }).format(d);
+      })()
+    : dateLabel;
 
   if (isCompleted) {
     return (
@@ -459,7 +468,7 @@ function DayCard({
           >
             <Stack>
               <Typography variant="caption" color="primary.main">
-                Today · {dateLabel}
+                Today · {todayDateLabel}
               </Typography>
               <Typography variant="h2">{day.splitDayType.name}</Typography>
               <Typography variant="body2" color="text.secondary">

@@ -62,10 +62,13 @@ export default tseslint.config(
     ...cfg,
     files: ['src/**/*.{ts,tsx}', 'e2e/**/*.{ts,tsx}'],
   })),
-  // Non-type-aware fallback for config files at the repo root.
+  // Non-type-aware fallback for config files at the repo root. Use the TS
+  // parser so `as const`, `import type`, etc. parse cleanly — but skip the
+  // type-aware rule set since these files aren't in a tsconfig project.
   {
     files: ['*.{js,ts,cjs,mjs}', 'vite.config.ts', 'playwright.config.ts'],
     languageOptions: {
+      parser: tseslint.parser,
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: { ...globals.node },

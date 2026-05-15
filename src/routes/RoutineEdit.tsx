@@ -207,9 +207,7 @@ function RoutineEditor({ detail }: RoutineEditorProps) {
     // Translate "Monday=0..Sunday=6" UI index to a local date that lands on
     // the chosen weekday. Uses the current anchor as a base so the date
     // stays close to "today".
-    const base = detail.program.anchorDate
-      ? parseLocalDate(detail.program.anchorDate)
-      : new Date();
+    const base = detail.program.anchorDate ? parseLocalDate(detail.program.anchorDate) : new Date();
     const targetJs = (mondayIndex + 1) % 7;
     const offset = (targetJs - base.getDay() + 7) % 7;
     return addDays(toLocalDateString(base), offset);

@@ -254,7 +254,10 @@ export async function restoreProgramSnapshot(snapshot: ProgramSnapshot): Promise
 }
 
 /** Append a new empty slot (and matching split-day type) at the end of the routine. */
-export async function addProgramSlot(programId: string, name?: string): Promise<{ slotId: string }> {
+export async function addProgramSlot(
+  programId: string,
+  name?: string,
+): Promise<{ slotId: string }> {
   const db = getDb();
   return withWorkoutWriteLock(async () => {
     return db.transaction('rw', [db.scheduleSlot, db.splitDayType], async () => {
@@ -303,10 +306,7 @@ export async function duplicateProgramSlot(slotId: string): Promise<{ slotId: st
           .where('scheduleSlotId')
           .equals(slotId)
           .toArray();
-        const existing = await db.scheduleSlot
-          .where('programId')
-          .equals(src.programId)
-          .toArray();
+        const existing = await db.scheduleSlot.where('programId').equals(src.programId).toArray();
 
         const newSdt: SplitDayType = {
           id: newId(),

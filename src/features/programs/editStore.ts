@@ -13,11 +13,7 @@ interface RoutineEditState {
   editingProgramId: string | null;
   snapshot: ProgramSnapshot | null;
   isNewlyCreated: boolean;
-  enterEdit: (
-    programId: string,
-    snapshot: ProgramSnapshot | null,
-    isNewlyCreated: boolean,
-  ) => void;
+  enterEdit: (programId: string, snapshot: ProgramSnapshot | null, isNewlyCreated: boolean) => void;
   clear: () => void;
 }
 

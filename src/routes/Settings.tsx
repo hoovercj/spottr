@@ -153,114 +153,114 @@ export function Settings() {
         }}
       >
         <Stack spacing={2}>
-        <Typography variant="h2">Default units</Typography>
-        <Typography variant="body2" color="text.secondary">
-          The weight unit used everywhere a location doesn't have its own override.
-        </Typography>
-        <ToggleButtonGroup
-          value={userSettings?.units ?? 'lb'}
-          exclusive
-          onChange={(_e, next: Units | null) => {
-            if (next) void setUserUnits(next);
-          }}
-          aria-label="Default unit system"
-        >
-          <ToggleButton value="lb" sx={{ px: 3 }}>
-            Pounds (lb)
-          </ToggleButton>
-          <ToggleButton value="kg" sx={{ px: 3 }}>
-            Kilograms (kg)
-          </ToggleButton>
-        </ToggleButtonGroup>
-
-        <Divider sx={{ my: 1 }} />
-
-        <Typography variant="h2">Backups</Typography>
-        <ExportStatusLine status={status} />
-
-        {error && (
-          <Box role="alert" sx={{ color: 'error.main' }}>
-            <Typography variant="body2">Export failed. {error}</Typography>
-          </Box>
-        )}
-
-        <Button onClick={() => void exportNow()} disabled={busy} variant="contained" fullWidth>
-          Export now
-        </Button>
-
-        <Divider sx={{ my: 1 }} />
-
-        <Typography variant="body2" color="text.secondary">
-          Current destination: {status?.destinationKind ?? 'unknown'}
-        </Typography>
-        <Button
-          onClick={() => void switchToFolder()}
-          disabled={busy || !supportsFileSystemAccess()}
-          variant="text"
-        >
-          Change folder
-        </Button>
-        <Button onClick={() => void switchToDownload()} disabled={busy} variant="text">
-          Use downloads folder
-        </Button>
-
-        <Divider sx={{ my: 1 }} />
-
-        <Typography variant="h2">Restore</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Pick a previously exported `.json` file to replace local data.
-        </Typography>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json,.json"
-          hidden
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void onRestoreFile(f);
-            if (e.target) e.target.value = '';
-          }}
-        />
-        <Button variant="text" onClick={() => fileInputRef.current?.click()} disabled={busy}>
-          Restore from file…
-        </Button>
-        {restoreInfo && (
-          <Typography variant="body2" color="primary.main">
-            {restoreInfo}
+          <Typography variant="h2">Default units</Typography>
+          <Typography variant="body2" color="text.secondary">
+            The weight unit used everywhere a location doesn't have its own override.
           </Typography>
-        )}
+          <ToggleButtonGroup
+            value={userSettings?.units ?? 'lb'}
+            exclusive
+            onChange={(_e, next: Units | null) => {
+              if (next) void setUserUnits(next);
+            }}
+            aria-label="Default unit system"
+          >
+            <ToggleButton value="lb" sx={{ px: 3 }}>
+              Pounds (lb)
+            </ToggleButton>
+            <ToggleButton value="kg" sx={{ px: 3 }}>
+              Kilograms (kg)
+            </ToggleButton>
+          </ToggleButtonGroup>
 
-        <Divider sx={{ my: 1 }} />
+          <Divider sx={{ my: 1 }} />
 
-        <Typography variant="h2">Developer</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Populate the database with 8 weeks of fake completed sessions so the history, calendar,
-          and progress views have something to render.
-        </Typography>
-        <Button variant="text" onClick={() => void onSeedFakeHistory()} disabled={busy}>
-          Generate fake history
-        </Button>
-        {fakeInfo && (
-          <Typography variant="body2" color="primary.main">
-            {fakeInfo}
+          <Typography variant="h2">Backups</Typography>
+          <ExportStatusLine status={status} />
+
+          {error && (
+            <Box role="alert" sx={{ color: 'error.main' }}>
+              <Typography variant="body2">Export failed. {error}</Typography>
+            </Box>
+          )}
+
+          <Button onClick={() => void exportNow()} disabled={busy} variant="contained" fullWidth>
+            Export now
+          </Button>
+
+          <Divider sx={{ my: 1 }} />
+
+          <Typography variant="body2" color="text.secondary">
+            Current destination: {status?.destinationKind ?? 'unknown'}
           </Typography>
-        )}
+          <Button
+            onClick={() => void switchToFolder()}
+            disabled={busy || !supportsFileSystemAccess()}
+            variant="text"
+          >
+            Change folder
+          </Button>
+          <Button onClick={() => void switchToDownload()} disabled={busy} variant="text">
+            Use downloads folder
+          </Button>
 
-        <Divider sx={{ my: 1 }} />
+          <Divider sx={{ my: 1 }} />
 
-        <Typography variant="h2">Danger zone</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Deletes every workout, variant, location, and the export destination on this device.
-          Export first if you want to keep any of it.
-        </Typography>
-        <Button
-          variant="text"
-          color="error"
-          onClick={() => setResetConfirmOpen(true)}
-          disabled={busy}
-        >
-          Reset all data
-        </Button>
+          <Typography variant="h2">Restore</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Pick a previously exported `.json` file to replace local data.
+          </Typography>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onRestoreFile(f);
+              if (e.target) e.target.value = '';
+            }}
+          />
+          <Button variant="text" onClick={() => fileInputRef.current?.click()} disabled={busy}>
+            Restore from file…
+          </Button>
+          {restoreInfo && (
+            <Typography variant="body2" color="primary.main">
+              {restoreInfo}
+            </Typography>
+          )}
+
+          <Divider sx={{ my: 1 }} />
+
+          <Typography variant="h2">Developer</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Populate the database with 8 weeks of fake completed sessions so the history, calendar,
+            and progress views have something to render.
+          </Typography>
+          <Button variant="text" onClick={() => void onSeedFakeHistory()} disabled={busy}>
+            Generate fake history
+          </Button>
+          {fakeInfo && (
+            <Typography variant="body2" color="primary.main">
+              {fakeInfo}
+            </Typography>
+          )}
+
+          <Divider sx={{ my: 1 }} />
+
+          <Typography variant="h2">Danger zone</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Deletes every workout, variant, location, and the export destination on this device.
+            Export first if you want to keep any of it.
+          </Typography>
+          <Button
+            variant="text"
+            color="error"
+            onClick={() => setResetConfirmOpen(true)}
+            disabled={busy}
+          >
+            Reset all data
+          </Button>
         </Stack>
       </Box>
 

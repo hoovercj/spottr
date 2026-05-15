@@ -222,7 +222,13 @@ const NSUNS_531_4DAY: SeedSlot[] = [
     isRest: false,
     lifts: [
       { familyName: 'Bench Press', variantKind: 'barbell', sets: 5, repsMin: 1, repsMax: 5 },
-      { familyName: 'Incline Bench Press', variantKind: 'barbell', sets: 5, repsMin: 3, repsMax: 8 },
+      {
+        familyName: 'Incline Bench Press',
+        variantKind: 'barbell',
+        sets: 5,
+        repsMin: 3,
+        repsMax: 8,
+      },
       { familyName: 'Skullcrusher', variantKind: 'barbell', sets: 3, repsMin: 8, repsMax: 12 },
       { familyName: 'Lateral Raise', variantKind: 'dumbbell', sets: 3, repsMin: 12, repsMax: 15 },
     ],

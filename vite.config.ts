@@ -1,9 +1,28 @@
 import { defineConfig } from 'vitest/config';
+import { copyFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath } from 'node:url';
 
 const APP_BASE = '/WorkoutBuddy/';
+
+/**
+ * Copy `dist/index.html` to `dist/404.html` so GitHub Pages serves the SPA
+ * shell on direct navigations to deep links (e.g. `/WorkoutBuddy/settings`).
+ * Pages returns 404.html for unmatched paths; React Router takes over once
+ * the shell loads.
+ */
+function spaFallback404() {
+  return {
+    name: 'spa-fallback-404',
+    apply: 'build' as const,
+    closeBundle() {
+      const dist = resolve(process.cwd(), 'dist');
+      copyFileSync(resolve(dist, 'index.html'), resolve(dist, '404.html'));
+    },
+  };
+}
 
 export default defineConfig({
   base: APP_BASE,
@@ -14,9 +33,13 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    spaFallback404(),
     VitePWA({
-      registerType: 'prompt',
-      injectRegister: false,
+      // `autoUpdate` swaps in new service-worker versions on next load; the
+      // app doesn't surface a "new version" banner, so a silent update is
+      // the right default for a personal-use PWA.
+      registerType: 'autoUpdate',
+      injectRegister: 'auto',
       strategies: 'generateSW',
       workbox: {
         clientsClaim: false,
