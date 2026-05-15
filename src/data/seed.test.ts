@@ -68,7 +68,7 @@ describe('seedIfNeeded()', () => {
     expect(names).toContain(NO_LOCATION_NAME);
   });
 
-  it('creates the Push superset (tricep pushdown + lateral raise) on Day 2', async () => {
+  it('creates the Push supersets (tricep pushdown + lateral raise; overhead extension + lateral raise) on Day 2', async () => {
     await runSeed();
     const db = getDb();
 
@@ -81,15 +81,19 @@ describe('seedIfNeeded()', () => {
       .where('scheduleSlotId')
       .equals(pushSlot.id)
       .toArray();
-    expect(supersets).toHaveLength(1);
-    expect(supersets[0]!.slotPlanIds).toHaveLength(2);
+    expect(supersets).toHaveLength(2);
+    expect(supersets.every((g) => g.slotPlanIds.length === 2)).toBe(true);
 
-    const referencedPlans = await Promise.all(
-      supersets[0]!.slotPlanIds.map((id) => db.slotPlan.get(id)),
-    );
-    const familyNames = await Promise.all(
-      referencedPlans.map(async (p) => (await db.liftFamily.get(p!.liftFamilyId))!.name),
-    );
-    expect(familyNames.sort()).toEqual(['Lateral Raise', 'Tricep Pushdown']);
+    const flatNames = new Set<string>();
+    for (const g of supersets) {
+      for (const id of g.slotPlanIds) {
+        const plan = await db.slotPlan.get(id);
+        const fam = plan && (await db.liftFamily.get(plan.liftFamilyId));
+        if (fam) flatNames.add(fam.name);
+      }
+    }
+    expect(flatNames.has('Tricep Pushdown')).toBe(true);
+    expect(flatNames.has('Lateral Raise')).toBe(true);
+    expect(flatNames.has('Overhead Tricep Extension')).toBe(true);
   });
 });

@@ -207,7 +207,23 @@ describe('amendments', () => {
 
   it('removeSessionLift slot-scope also deletes the SlotPlan on this slot', async () => {
     const { db, lifts, slot } = await fixture();
-    const target = lifts[0]!;
+    // Pick a lift whose family is uniquely planned on this slot — the
+    // updated PPL plans some families (e.g. Row) twice in one day, and the
+    // slot-scope removal targets all plans for the family, which breaks
+    // the "exactly one plan deleted" assertion.
+    let target: (typeof lifts)[number] | null = null;
+    for (const candidate of lifts) {
+      const planCount = await db.slotPlan
+        .where('scheduleSlotId')
+        .equals(slot.id)
+        .and((p) => p.liftFamilyId === candidate.liftFamilyId)
+        .count();
+      if (planCount === 1) {
+        target = candidate;
+        break;
+      }
+    }
+    if (!target) throw new Error('No singly-planned family on this slot');
     const plansBefore = await db.slotPlan
       .where('scheduleSlotId')
       .equals(slot.id)
