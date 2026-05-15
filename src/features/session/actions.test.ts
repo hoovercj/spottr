@@ -246,4 +246,20 @@ describe('session actions', () => {
     await completeSession(sessionId);
     expect(await getActiveSession()).toBeNull();
   });
+
+  it('getActiveSession returns null after discard (tombstone is filtered)', async () => {
+    await runSeed();
+    const db = getDb();
+    const slot = await getDefaultSlotForToday();
+    const location = (await db.location.toArray())[0]!;
+    const { sessionId } = await startSession({
+      scheduleSlotId: slot!.id,
+      locationId: location.id,
+    });
+    expect((await getActiveSession())?.id).toBe(sessionId);
+    await discardSession(sessionId);
+    // Row still exists with state='ACTIVE' but deletedAt is set —
+    // active-session lookup must filter tombstones.
+    expect(await getActiveSession()).toBeNull();
+  });
 });

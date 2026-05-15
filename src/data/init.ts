@@ -43,7 +43,8 @@ export async function initData(): Promise<InitOutcome> {
 
 async function backfillProgramAnchor(): Promise<void> {
   const db = getDb();
-  const programs = await db.program.toArray();
+  // Tombstoned programs don't need backfill — they'll never be activated again.
+  const programs = await db.live.program.toArray();
   const needsBackfill = programs.filter((p) => !p.anchorDate);
   if (needsBackfill.length === 0) return;
   const anchor = mostRecentMonday();
@@ -56,10 +57,13 @@ async function backfillProgramAnchor(): Promise<void> {
 
 async function backfillNoLocation(): Promise<void> {
   const db = getDb();
-  const all = await db.location.toArray();
+  // Look at live rows only — a tombstoned NO_LOCATION shouldn't block us from
+  // recreating it (and the recreate uses a fresh id, so it doesn't collide).
+  const all = await db.live.location.toArray();
   if (all.some((l) => l.name === NO_LOCATION_NAME)) return;
+  const now = nowIso();
   await withWorkoutWriteLock(async () => {
-    await db.location.put({ id: newId(), name: NO_LOCATION_NAME, createdAt: nowIso() });
+    await db.location.put({ id: newId(), name: NO_LOCATION_NAME, createdAt: now, updatedAt: now });
   });
 }
 
@@ -75,11 +79,11 @@ async function ensureCurrentLocationSet(): Promise<void> {
   const db = getDb();
   const row = await db.meta.get(META_CURRENT_LOCATION);
   if (row?.value) {
-    // Validate the pinned id still exists; otherwise reseat below.
-    const exists = await db.location.get(row.value as string);
+    // Validate the pinned id still exists AND isn't a tombstone; otherwise reseat.
+    const exists = await db.live.location.get(row.value as string);
     if (exists) return;
   }
-  const all = await db.location.toArray();
+  const all = await db.live.location.toArray();
   if (all.length === 0) return;
   const preferred = all.find((l) => l.name !== NO_LOCATION_NAME) ?? all[0]!;
   await withWorkoutWriteLock(async () => {

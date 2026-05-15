@@ -23,10 +23,10 @@ export function useCompletedSessions(): CompletedSessionView[] | undefined {
     const results: CompletedSessionView[] = [];
     for (const session of sessions) {
       const slot = session.scheduleSlotId
-        ? await db.scheduleSlot.get(session.scheduleSlotId)
+        ? await db.live.scheduleSlot.get(session.scheduleSlotId)
         : null;
-      const sdt = slot ? await db.splitDayType.get(slot.splitDayTypeId) : null;
-      const location = await db.location.get(session.locationId);
+      const sdt = slot ? await db.live.splitDayType.get(slot.splitDayTypeId) : null;
+      const location = await db.live.location.get(session.locationId);
       const lifts = await db.live.sessionLift.where('sessionId').equals(session.id).toArray();
       const liftIds = lifts.map((l) => l.id);
       let loggedCount = 0;
@@ -71,24 +71,24 @@ export function useVariantHistory(
   return useLiveQuery(async () => {
     if (!variantId) return { variant: null, rows: [] };
     const db = getDb();
-    const variant = (await db.variant.get(variantId)) ?? null;
+    const variant = (await db.live.variant.get(variantId)) ?? null;
     const canonicalId = variant?.isAlias && variant.canonicalId ? variant.canonicalId : variantId;
 
-    const lifts = await db.sessionLift.where('variantId').equals(canonicalId).toArray();
+    const lifts = await db.live.sessionLift.where('variantId').equals(canonicalId).toArray();
     const rows: VariantHistoryRow[] = [];
     for (const lift of lifts) {
-      const session = await db.session.get(lift.sessionId);
+      const session = await db.live.session.get(lift.sessionId);
       if (!session || session.state !== 'COMPLETED') continue;
-      const sets = await db.sessionSet.where('sessionLiftId').equals(lift.id).toArray();
+      const sets = await db.live.sessionSet.where('sessionLiftId').equals(lift.id).toArray();
       const filtered = repRange
         ? sets.filter((s) => s.plannedRepsMin === repRange.min && s.plannedRepsMax === repRange.max)
         : sets;
       if (filtered.length === 0) continue;
       const slot = session.scheduleSlotId
-        ? await db.scheduleSlot.get(session.scheduleSlotId)
+        ? await db.live.scheduleSlot.get(session.scheduleSlotId)
         : null;
-      const sdt = slot ? await db.splitDayType.get(slot.splitDayTypeId) : null;
-      const location = await db.location.get(session.locationId);
+      const sdt = slot ? await db.live.splitDayType.get(slot.splitDayTypeId) : null;
+      const location = await db.live.location.get(session.locationId);
       rows.push({
         session,
         sessionLift: lift,
@@ -122,17 +122,25 @@ export function useSessionDetail(sessionId: string | null): SessionDetailView | 
   return useLiveQuery(async () => {
     if (!sessionId) return null;
     const db = getDb();
-    const session = await db.session.get(sessionId);
+    const session = await db.live.session.get(sessionId);
     if (!session) return null;
-    const slot = session.scheduleSlotId ? await db.scheduleSlot.get(session.scheduleSlotId) : null;
-    const sdt = slot ? await db.splitDayType.get(slot.splitDayTypeId) : null;
-    const location = await db.location.get(session.locationId);
-    const lifts = await db.sessionLift.where('sessionId').equals(sessionId).sortBy('orderIndex');
+    const slot = session.scheduleSlotId
+      ? await db.live.scheduleSlot.get(session.scheduleSlotId)
+      : null;
+    const sdt = slot ? await db.live.splitDayType.get(slot.splitDayTypeId) : null;
+    const location = await db.live.location.get(session.locationId);
+    const lifts = await db.live.sessionLift
+      .where('sessionId')
+      .equals(sessionId)
+      .sortBy('orderIndex');
     const liftViews: SessionDetailView['lifts'] = [];
     for (const lift of lifts) {
-      const fam = await db.liftFamily.get(lift.liftFamilyId);
-      const variant = (await db.variant.get(lift.variantId)) ?? null;
-      const sets = await db.sessionSet.where('sessionLiftId').equals(lift.id).sortBy('orderIndex');
+      const fam = await db.live.liftFamily.get(lift.liftFamilyId);
+      const variant = (await db.live.variant.get(lift.variantId)) ?? null;
+      const sets = await db.live.sessionSet
+        .where('sessionLiftId')
+        .equals(lift.id)
+        .sortBy('orderIndex');
       liftViews.push({
         lift,
         familyName: fam?.name ?? '—',
@@ -140,8 +148,8 @@ export function useSessionDetail(sessionId: string | null): SessionDetailView | 
         sets,
       });
     }
-    const cardio = await db.cardioEntry.where('sessionId').equals(sessionId).first();
-    const stretch = await db.stretchEntry.where('sessionId').equals(sessionId).first();
+    const cardio = await db.live.cardioEntry.where('sessionId').equals(sessionId).first();
+    const stretch = await db.live.stretchEntry.where('sessionId').equals(sessionId).first();
     return {
       session,
       splitDayTypeName: sdt?.name ?? '—',

@@ -202,7 +202,11 @@ function LiftSection({ detail, mode, inSuperset }: LiftSectionProps) {
       if (cancelled) return;
       setSuggestion(sugg);
       setHistoryText(formatHistoryLine(history, repRange));
-    })().catch(() => {
+    })().catch((err) => {
+      // History/suggestion failures degrade gracefully in the UI, but they
+      // shouldn't be invisible — log so a user-reported "no suggestion"
+      // can be diagnosed.
+      console.error('[Lift] history/suggestion fetch failed', err);
       if (!cancelled) {
         setSuggestion({ weight: null, reasoning: 'History query failed.' });
       }

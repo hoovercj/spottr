@@ -3,84 +3,102 @@ import { Box, Button, Chip, Stack, Typography } from '@mui/material';
 import { ProgressChart } from '@/components/ProgressChart';
 import { BottomListDrawer } from '@/components/BottomListDrawer';
 import {
-  useAllChartableVariants,
-  useDefaultProgressVariants,
+  makeSeriesKey,
+  parseSeriesKey,
+  repRangeLabel,
+  useAllChartableBuckets,
+  useDefaultProgressBuckets,
   useProgressData,
 } from '@/features/progress/queries';
-import type { ChartableVariant } from '@/features/progress/queries';
+import type { ChartableBucket, ProgressBucket } from '@/features/progress/queries';
 
 interface FamilyGroup {
   familyId: string;
   familyName: string;
-  variants: ChartableVariant[];
+  buckets: ChartableBucket[];
 }
 
-function groupByFamily(all: ChartableVariant[]): FamilyGroup[] {
+function groupByFamily(all: ChartableBucket[]): FamilyGroup[] {
   const map = new Map<string, FamilyGroup>();
-  for (const v of all) {
-    let group = map.get(v.liftFamilyId);
+  for (const b of all) {
+    let group = map.get(b.liftFamilyId);
     if (!group) {
-      group = { familyId: v.liftFamilyId, familyName: v.liftFamilyName, variants: [] };
-      map.set(v.liftFamilyId, group);
+      group = { familyId: b.liftFamilyId, familyName: b.liftFamilyName, buckets: [] };
+      map.set(b.liftFamilyId, group);
     }
-    group.variants.push(v);
+    group.buckets.push(b);
   }
   return [...map.values()].sort((a, b) => a.familyName.localeCompare(b.familyName));
 }
 
+function bucketLabel(b: ChartableBucket): string {
+  const range = repRangeLabel(b.plannedRepsMin, b.plannedRepsMax);
+  const reps = b.isBodyweight ? ' reps' : '';
+  return `${b.liftFamilyName} (${b.variantName}) · ${range}${reps}`;
+}
+
 export function Progress() {
-  const defaults = useDefaultProgressVariants();
-  const all = useAllChartableVariants();
-  const [selected, setSelected] = useState<string[] | null>(null);
-  const [pickerStep, setPickerStep] = useState<'closed' | 'family' | 'variant'>('closed');
+  const defaults = useDefaultProgressBuckets();
+  const all = useAllChartableBuckets();
+  const [selectedKeys, setSelectedKeys] = useState<string[] | null>(null);
+  const [pickerStep, setPickerStep] = useState<'closed' | 'family' | 'bucket'>('closed');
   const [pickerFamilyId, setPickerFamilyId] = useState<string | null>(null);
 
-  // Seed the selection with the active routine's first lifts once both
-  // queries have resolved. Only include defaults that actually have logged
-  // data — otherwise the chart sits empty even though other variants in the
-  // library have history.
+  // Seed the selection with the active routine's first-lift buckets once
+  // both queries have resolved. Only include defaults that actually have
+  // logged data in that exact (variant, rep range) — otherwise the chart
+  // sits empty even though the picker has other usable buckets.
   useEffect(() => {
-    if (selected !== null) return;
+    if (selectedKeys !== null) return;
     if (!defaults || !all) return;
     if (defaults.length === 0) return;
-    const chartableIds = new Set(all.map((v) => v.variantId));
-    const filtered = defaults.filter((id) => chartableIds.has(id));
-    if (filtered.length === 0) return;
-    setSelected(filtered);
-  }, [defaults, all, selected]);
+    const chartableKeys = new Set(all.map((b) => b.seriesKey));
+    const seedKeys = defaults
+      .map((b) => makeSeriesKey(b.variantId, b.plannedRepsMin, b.plannedRepsMax))
+      .filter((k) => chartableKeys.has(k));
+    if (seedKeys.length === 0) return;
+    setSelectedKeys(seedKeys);
+  }, [defaults, all, selectedKeys]);
 
-  const effectiveSelection = useMemo(() => selected ?? [], [selected]);
-  const data = useProgressData(effectiveSelection);
-  const variantById = useMemo(() => {
-    const m = new Map<string, ChartableVariant>();
-    for (const v of all ?? []) m.set(v.variantId, v);
+  const effectiveSelection: string[] = useMemo(() => selectedKeys ?? [], [selectedKeys]);
+  const buckets: ProgressBucket[] = useMemo(
+    () =>
+      effectiveSelection
+        .map((k) => parseSeriesKey(k))
+        .filter((b): b is ProgressBucket => b !== null),
+    [effectiveSelection],
+  );
+  const data = useProgressData(buckets);
+  const bucketByKey = useMemo(() => {
+    const m = new Map<string, ChartableBucket>();
+    for (const b of all ?? []) m.set(b.seriesKey, b);
     return m;
   }, [all]);
   const families = useMemo(() => groupByFamily(all ?? []), [all]);
 
-  const remove = (variantId: string) => {
-    setSelected((cur) => (cur ?? []).filter((x) => x !== variantId));
+  const remove = (seriesKey: string) => {
+    setSelectedKeys((cur) => (cur ?? []).filter((x) => x !== seriesKey));
   };
 
-  const addVariant = (variantId: string) => {
-    setSelected((cur) => {
+  const toggle = (seriesKey: string) => {
+    setSelectedKeys((cur) => {
       const base = cur ?? [];
-      if (base.includes(variantId)) return base;
-      return [...base, variantId];
+      if (base.includes(seriesKey)) return base.filter((x) => x !== seriesKey);
+      return [...base, seriesKey];
     });
   };
 
   const onPickFamily = (familyId: string) => {
     const group = families.find((g) => g.familyId === familyId);
     if (!group) return;
-    if (group.variants.length === 1) {
-      // Single variant with data — add directly, no second step.
-      addVariant(group.variants[0]!.variantId);
+    if (group.buckets.length === 1) {
+      // Family has exactly one bucket logged — add directly, no second step.
+      toggle(group.buckets[0]!.seriesKey);
       closePicker();
       return;
     }
     setPickerFamilyId(familyId);
-    setPickerStep('variant');
+    setPickerStep('bucket');
   };
 
   const closePicker = () => {
@@ -88,8 +106,8 @@ export function Progress() {
     setPickerFamilyId(null);
   };
 
-  const variantsForCurrentFamily = pickerFamilyId
-    ? (families.find((g) => g.familyId === pickerFamilyId)?.variants ?? [])
+  const bucketsForCurrentFamily = pickerFamilyId
+    ? (families.find((g) => g.familyId === pickerFamilyId)?.buckets ?? [])
     : [];
 
   return (
@@ -117,7 +135,8 @@ export function Progress() {
         <Stack spacing={0.5}>
           <Typography variant="h1">Progress</Typography>
           <Typography variant="body2" color="text.secondary">
-            Top set per session. Weight on the left axis, bodyweight reps on the right.
+            Top set per session within each rep range. Weight on the left, bodyweight reps on the
+            right.
           </Typography>
         </Stack>
       </Box>
@@ -148,12 +167,10 @@ export function Progress() {
                 No exercises selected.
               </Typography>
             )}
-            {effectiveSelection.map((id) => {
-              const v = variantById.get(id);
-              const label = v
-                ? `${v.liftFamilyName} · ${v.variantName}${v.isBodyweight ? ' (reps)' : ''}`
-                : id;
-              return <Chip key={id} label={label} onDelete={() => remove(id)} size="small" />;
+            {effectiveSelection.map((key) => {
+              const b = bucketByKey.get(key);
+              const label = b ? bucketLabel(b) : key;
+              return <Chip key={key} label={label} onDelete={() => remove(key)} size="small" />;
             })}
           </Stack>
           <Button
@@ -178,8 +195,13 @@ export function Progress() {
       >
         <Stack>
           {families.map((g) => {
-            const allOn = g.variants.every((v) => effectiveSelection.includes(v.variantId));
-            const someOn = g.variants.some((v) => effectiveSelection.includes(v.variantId));
+            const allOn = g.buckets.every((b) => effectiveSelection.includes(b.seriesKey));
+            const someOn = g.buckets.some((b) => effectiveSelection.includes(b.seriesKey));
+            const subtitle =
+              g.buckets.length === 1
+                ? repRangeLabel(g.buckets[0]!.plannedRepsMin, g.buckets[0]!.plannedRepsMax) +
+                  ' reps'
+                : `${g.buckets.length} buckets logged`;
             return (
               <Box
                 key={g.familyId}
@@ -206,11 +228,9 @@ export function Progress() {
               >
                 <Stack>
                   <Typography variant="body1">{g.familyName}</Typography>
-                  {g.variants.length > 1 && (
-                    <Typography variant="caption" color="text.secondary">
-                      {g.variants.length} variants with data
-                    </Typography>
-                  )}
+                  <Typography variant="caption" color="text.secondary">
+                    {subtitle}
+                  </Typography>
                 </Stack>
                 {allOn ? (
                   <Typography variant="caption" color="primary.main">
@@ -228,26 +248,21 @@ export function Progress() {
       </BottomListDrawer>
 
       <BottomListDrawer
-        open={pickerStep === 'variant'}
-        title="Choose variant"
+        open={pickerStep === 'bucket'}
+        title="Choose variant + rep range"
         onBack={() => setPickerStep('family')}
         onClose={closePicker}
       >
         <Stack>
-          {variantsForCurrentFamily.map((v) => {
-            const on = effectiveSelection.includes(v.variantId);
+          {bucketsForCurrentFamily.map((b) => {
+            const on = effectiveSelection.includes(b.seriesKey);
+            const range = repRangeLabel(b.plannedRepsMin, b.plannedRepsMax);
             return (
               <Box
-                key={v.variantId}
+                key={b.seriesKey}
                 component="button"
                 type="button"
-                onClick={() => {
-                  if (on) {
-                    remove(v.variantId);
-                  } else {
-                    addVariant(v.variantId);
-                  }
-                }}
+                onClick={() => toggle(b.seriesKey)}
                 sx={{
                   all: 'unset',
                   cursor: 'pointer',
@@ -262,8 +277,11 @@ export function Progress() {
                 }}
               >
                 <Stack>
-                  <Typography variant="body1">{v.variantName}</Typography>
-                  {v.isBodyweight && (
+                  <Typography variant="body1">
+                    {b.variantName} · {range}
+                    {b.isBodyweight ? ' reps' : ''}
+                  </Typography>
+                  {b.isBodyweight && (
                     <Typography variant="caption" color="text.secondary">
                       plots reps on the right axis
                     </Typography>

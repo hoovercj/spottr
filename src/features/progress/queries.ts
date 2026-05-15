@@ -1,10 +1,12 @@
 /**
  * Progress-chart data fetchers.
  *
- * One series per **variant** (not per family). A family like "Bench Press"
- * with both barbell and dumbbell data plots as two distinct lines so the
- * user can see each variant's progression — and tag the picker prompt
- * accordingly.
+ * One series per **(variant, planned rep range)**. A family like "Bench
+ * Press" with both barbell and dumbbell data plots as two distinct lines —
+ * and each is further split when sets were logged at different planned rep
+ * ranges (e.g. 5×5 vs 3×8-12). Mixing those would combine two training
+ * modalities on different weight scales and read as noise; splitting keeps
+ * each scheme's progression legible without estimating 1RM.
  *
  * Weight-tracked variants (loggedWeight > 0) plot on the left Y axis in the
  * user's default units. Bodyweight variants (`equipmentKind === 'bodyweight'`
@@ -27,11 +29,15 @@ export interface SeriesPoint {
 }
 
 export interface ProgressSeries {
-  /** Stable key for the line — variantId. */
+  /** Stable Recharts dataKey: `${variantId}::${repMin}-${repMax}`. */
+  seriesKey: string;
   variantId: string;
   liftFamilyId: string;
   liftFamilyName: string;
   variantName: string;
+  /** Planned rep range that defines this series. */
+  plannedRepsMin: number;
+  plannedRepsMax: number;
   metric: SeriesMetric;
   points: SeriesPoint[];
 }
@@ -39,174 +45,270 @@ export interface ProgressSeries {
 export interface ProgressChartData {
   units: Units;
   series: ProgressSeries[];
-  /** Merged date-keyed rows for Recharts. */
-  rows: Array<{ date: string; [variantId: string]: number | string }>;
+  /** Merged date-keyed rows for Recharts, keyed by series.seriesKey. */
+  rows: Array<{ date: string; [seriesKey: string]: number | string }>;
   /** Whether any series uses the weight axis — drives the left axis render. */
   hasWeight: boolean;
   /** Whether any series uses the reps axis — drives the right axis render. */
   hasReps: boolean;
 }
 
-export interface ChartableVariant {
+export function repRangeLabel(min: number, max: number): string {
+  return min === max ? String(min) : `${min}-${max}`;
+}
+
+export function makeSeriesKey(variantId: string, min: number, max: number): string {
+  return `${variantId}::${min}-${max}`;
+}
+
+export interface ProgressBucket {
+  variantId: string;
+  plannedRepsMin: number;
+  plannedRepsMax: number;
+}
+
+/** Parses a seriesKey back into its bucket parts, or null if malformed. */
+export function parseSeriesKey(seriesKey: string): ProgressBucket | null {
+  const idx = seriesKey.indexOf('::');
+  if (idx < 0) return null;
+  const variantId = seriesKey.slice(0, idx);
+  const rangePart = seriesKey.slice(idx + 2);
+  const dash = rangePart.indexOf('-');
+  if (dash < 0) return null;
+  const min = Number(rangePart.slice(0, dash));
+  const max = Number(rangePart.slice(dash + 1));
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  return { variantId, plannedRepsMin: min, plannedRepsMax: max };
+}
+
+/**
+ * A (variant, planned rep range) bucket that is selectable on the chart.
+ * The picker browses buckets — not bare variants — so each line a user adds
+ * is an unambiguous training scheme rather than a mix of e.g. 5×5 and 8-12.
+ */
+export interface ChartableBucket {
+  seriesKey: string;
   variantId: string;
   variantName: string;
   liftFamilyId: string;
   liftFamilyName: string;
+  plannedRepsMin: number;
+  plannedRepsMax: number;
   isBodyweight: boolean;
 }
 
 /**
- * Returns the catalog of variants that have at least one logged set in the
- * database. The picker uses this to:
- *   - show only families with any data on the chart-able list
- *   - prompt the user to choose a variant when a single family has data on
- *     more than one variant (e.g. Bench Press: barbell + machine)
+ * Returns every (variant, planned rep range) bucket that has at least one
+ * logged set. The picker browses these so the user adds one training scheme
+ * at a time (e.g. "Bench Press · Barbell · 5×5") rather than a variant whose
+ * rep ranges may differ between sessions.
  */
-export async function getAllChartableVariantsPure(): Promise<ChartableVariant[]> {
+export async function getAllChartableBucketsPure(): Promise<ChartableBucket[]> {
   const db = getDb();
-  const lifts = await db.sessionLift.toArray();
-  if (lifts.length === 0) return [];
-  const variantIds = [...new Set(lifts.map((l) => l.variantId))];
-  const variants = await db.variant.bulkGet(variantIds);
+  const sets = await db.live.sessionSet.toArray();
+  if (sets.length === 0) return [];
+
+  // Aggregate unique (variantId, min, max) for any logged set.
+  const bucketIds = new Map<string, ProgressBucket>();
+  for (const s of sets) {
+    if (!s.loggedAt) continue;
+    const key = makeSeriesKey(s.variantId, s.plannedRepsMin, s.plannedRepsMax);
+    if (!bucketIds.has(key)) {
+      bucketIds.set(key, {
+        variantId: s.variantId,
+        plannedRepsMin: s.plannedRepsMin,
+        plannedRepsMax: s.plannedRepsMax,
+      });
+    }
+  }
+  if (bucketIds.size === 0) return [];
+
+  const variantIds = [...new Set([...bucketIds.values()].map((b) => b.variantId))];
+  const variants = await db.live.variant.bulkGet(variantIds);
+  const variantById = new Map(
+    variants.filter((v): v is NonNullable<typeof v> => Boolean(v)).map((v) => [v.id, v]),
+  );
   const familyIds = [...new Set(variants.map((v) => v?.liftFamilyId).filter(Boolean))] as string[];
-  const families = await db.liftFamily.bulkGet(familyIds);
+  const families = await db.live.liftFamily.bulkGet(familyIds);
   const familyById = new Map(
     families.filter((f): f is NonNullable<typeof f> => Boolean(f)).map((f) => [f.id, f]),
   );
 
-  // Restrict to variants that actually have a logged set somewhere.
-  const liftIds = lifts.map((l) => l.id);
-  const setsByLiftIdsChunked = await db.sessionSet.where('sessionLiftId').anyOf(liftIds).toArray();
-  const liftsWithLogged = new Set<string>();
-  for (const s of setsByLiftIdsChunked) {
-    if (s.loggedAt) liftsWithLogged.add(s.sessionLiftId);
-  }
-  const variantHasLogged = new Set<string>();
-  for (const l of lifts) {
-    if (liftsWithLogged.has(l.id)) variantHasLogged.add(l.variantId);
-  }
-
-  const out: ChartableVariant[] = [];
-  for (const v of variants) {
-    if (!v) continue;
-    if (!variantHasLogged.has(v.id)) continue;
-    const fam = familyById.get(v.liftFamilyId);
+  const out: ChartableBucket[] = [];
+  for (const [seriesKey, b] of bucketIds) {
+    const variant = variantById.get(b.variantId);
+    if (!variant) continue;
+    const fam = familyById.get(variant.liftFamilyId);
     if (!fam) continue;
     out.push({
-      variantId: v.id,
-      variantName: v.name,
+      seriesKey,
+      variantId: variant.id,
+      variantName: variant.name,
       liftFamilyId: fam.id,
       liftFamilyName: fam.name,
-      isBodyweight: v.equipmentKind === 'bodyweight',
+      plannedRepsMin: b.plannedRepsMin,
+      plannedRepsMax: b.plannedRepsMax,
+      isBodyweight: variant.equipmentKind === 'bodyweight',
     });
   }
   out.sort(
     (a, b) =>
       a.liftFamilyName.localeCompare(b.liftFamilyName) ||
-      a.variantName.localeCompare(b.variantName),
+      a.variantName.localeCompare(b.variantName) ||
+      a.plannedRepsMin - b.plannedRepsMin ||
+      a.plannedRepsMax - b.plannedRepsMax,
   );
   return out;
 }
 
-export function useAllChartableVariants(): ChartableVariant[] | undefined {
-  return useLiveQuery(() => getAllChartableVariantsPure(), []);
+export function useAllChartableBuckets(): ChartableBucket[] | undefined {
+  return useLiveQuery(() => getAllChartableBucketsPure(), []);
 }
 
-/** Pure version of the default-variants query — used by the hook and tests. */
-export async function getDefaultProgressVariantsPure(): Promise<string[]> {
+/**
+ * Default chart selection: for each non-rest slot in the active routine,
+ * take the first slot plan's first planned set's `(variantId, repMin, repMax)`
+ * as the seed bucket. Deduped by seriesKey so two slots that share an
+ * exact (variant, rep range) bucket only seed once.
+ */
+export async function getDefaultProgressBucketsPure(): Promise<ProgressBucket[]> {
   const db = getDb();
-  const programs = await db.program.toArray();
+  const programs = await db.live.program.toArray();
   const program = programs.find((p) => p.isActive);
   if (!program) return [];
-  const slots = await db.scheduleSlot.where('programId').equals(program.id).sortBy('orderIndex');
-  const out: string[] = [];
+  const slots = await db.live.scheduleSlot
+    .where('programId')
+    .equals(program.id)
+    .sortBy('orderIndex');
+  const out: ProgressBucket[] = [];
   const seen = new Set<string>();
   for (const slot of slots) {
-    const sdt = await db.splitDayType.get(slot.splitDayTypeId);
+    const sdt = await db.live.splitDayType.get(slot.splitDayTypeId);
     if (sdt?.isRest) continue;
-    const plans = await db.slotPlan.where('scheduleSlotId').equals(slot.id).sortBy('orderIndex');
+    const plans = await db.live.slotPlan
+      .where('scheduleSlotId')
+      .equals(slot.id)
+      .sortBy('orderIndex');
     const first = plans[0];
     if (!first?.defaultVariantId) continue;
-    if (seen.has(first.defaultVariantId)) continue;
-    seen.add(first.defaultVariantId);
-    out.push(first.defaultVariantId);
+    const firstSet = first.plannedSets[0];
+    if (!firstSet) continue;
+    const seriesKey = makeSeriesKey(
+      first.defaultVariantId,
+      firstSet.plannedRepsMin,
+      firstSet.plannedRepsMax,
+    );
+    if (seen.has(seriesKey)) continue;
+    seen.add(seriesKey);
+    out.push({
+      variantId: first.defaultVariantId,
+      plannedRepsMin: firstSet.plannedRepsMin,
+      plannedRepsMax: firstSet.plannedRepsMax,
+    });
   }
   return out;
 }
 
-/**
- * First-exercise default variant for each non-rest slot in the active
- * routine, deduped — the seed selection on the Progress tab.
- */
-export function useDefaultProgressVariants(): string[] | undefined {
-  return useLiveQuery(() => getDefaultProgressVariantsPure(), []);
+export function useDefaultProgressBuckets(): ProgressBucket[] | undefined {
+  return useLiveQuery(() => getDefaultProgressBucketsPure(), []);
 }
 
-/** Pure progress-data fetcher — exposed for tests and direct callers. */
+/**
+ * Pure progress-data fetcher — emits exactly one series per requested
+ * bucket (variant + rep range), filtering sets to the bucket's exact
+ * (plannedRepsMin, plannedRepsMax). Best-per-session is taken within
+ * the bucket, never across rep ranges.
+ */
 export async function getProgressDataPure(
-  variantIds: string[],
+  buckets: ProgressBucket[],
   userUnits: Units,
 ): Promise<ProgressChartData> {
   const db = getDb();
-  if (variantIds.length === 0) {
+  if (buckets.length === 0) {
     return { units: userUnits, series: [], rows: [], hasWeight: false, hasReps: false };
   }
-  const variants = await db.variant.bulkGet(variantIds);
+
+  // De-dupe (variant, min, max) requests so a caller passing duplicates
+  // doesn't produce duplicate lines.
+  const wanted = new Map<string, ProgressBucket>();
+  for (const b of buckets) {
+    wanted.set(makeSeriesKey(b.variantId, b.plannedRepsMin, b.plannedRepsMax), b);
+  }
+  const wantedVariantIds = [...new Set([...wanted.values()].map((b) => b.variantId))];
+
+  const variants = await db.live.variant.bulkGet(wantedVariantIds);
+  const variantById = new Map(
+    variants.filter((v): v is NonNullable<typeof v> => Boolean(v)).map((v) => [v.id, v]),
+  );
   const familyIds = [...new Set(variants.map((v) => v?.liftFamilyId).filter(Boolean))] as string[];
-  const families = await db.liftFamily.bulkGet(familyIds);
+  const families = await db.live.liftFamily.bulkGet(familyIds);
   const familyById = new Map(
     families.filter((f): f is NonNullable<typeof f> => Boolean(f)).map((f) => [f.id, f]),
   );
 
   // Pre-cache sessions + locations for unit resolution.
-  const sessions = await db.session.where('state').equals('COMPLETED').toArray();
+  const sessions = await db.live.session.where('state').equals('COMPLETED').toArray();
   const sessionById = new Map(sessions.map((s) => [s.id, s]));
   const locationIds = [...new Set(sessions.map((s) => s.locationId))];
-  const locations = await db.location.bulkGet(locationIds);
+  const locations = await db.live.location.bulkGet(locationIds);
   const locationById = new Map(
     locations.filter((l): l is NonNullable<typeof l> => Boolean(l)).map((l) => [l.id, l]),
   );
 
-  const series: ProgressSeries[] = [];
+  // Walk lifts once per requested variant, accumulating per-bucket best-per-session.
+  interface BucketAcc {
+    bestPerSession: Map<string, number>;
+  }
+  const accBySeriesKey = new Map<string, BucketAcc>();
+  for (const key of wanted.keys()) accBySeriesKey.set(key, { bestPerSession: new Map() });
 
-  for (let i = 0; i < variantIds.length; i++) {
-    const vid = variantIds[i]!;
-    const variant = variants[i];
+  for (const vid of wantedVariantIds) {
+    const variant = variantById.get(vid);
     if (!variant) continue;
-    const family = familyById.get(variant.liftFamilyId);
-    if (!family) continue;
     const isBodyweight = variant.equipmentKind === 'bodyweight';
     const metric: SeriesMetric = isBodyweight ? 'reps' : 'weight';
 
-    const lifts = await db.sessionLift.where('variantId').equals(vid).toArray();
-    const bestPerSession = new Map<string, number>();
+    const lifts = await db.live.sessionLift.where('variantId').equals(vid).toArray();
     for (const lift of lifts) {
       const session = sessionById.get(lift.sessionId);
       if (!session) continue;
       const sessionUnits: Units = locationById.get(session.locationId)?.units ?? userUnits;
-      const sets = await db.sessionSet.where('sessionLiftId').equals(lift.id).toArray();
+      const sets = await db.live.sessionSet.where('sessionLiftId').equals(lift.id).toArray();
       for (const s of sets) {
         if (!s.loggedAt) continue;
+        const key = makeSeriesKey(s.variantId, s.plannedRepsMin, s.plannedRepsMax);
+        const acc = accBySeriesKey.get(key);
+        if (!acc) continue; // set is in a rep-range bucket we weren't asked about
+        let value: number;
         if (metric === 'weight') {
           if (s.loggedWeight == null) continue;
           // Skip 0-weight rows from a weight series — usually a tracked
           // variant that the user logged as bodyweight by accident; plotting
           // those would bottom-out the axis.
           if (s.loggedWeight === 0) continue;
-          const converted = convertWeight(s.loggedWeight, sessionUnits, userUnits);
-          const prev = bestPerSession.get(session.id);
-          if (prev == null || converted > prev) bestPerSession.set(session.id, converted);
+          value = convertWeight(s.loggedWeight, sessionUnits, userUnits);
         } else {
           if (s.loggedReps == null) continue;
-          const reps = s.loggedReps;
-          const prev = bestPerSession.get(session.id);
-          if (prev == null || reps > prev) bestPerSession.set(session.id, reps);
+          value = s.loggedReps;
         }
+        const prev = acc.bestPerSession.get(session.id);
+        if (prev == null || value > prev) acc.bestPerSession.set(session.id, value);
       }
     }
+  }
 
+  const series: ProgressSeries[] = [];
+  for (const [seriesKey, bucket] of wanted) {
+    const variant = variantById.get(bucket.variantId);
+    if (!variant) continue;
+    const family = familyById.get(variant.liftFamilyId);
+    if (!family) continue;
+    const isBodyweight = variant.equipmentKind === 'bodyweight';
+    const metric: SeriesMetric = isBodyweight ? 'reps' : 'weight';
+    const acc = accBySeriesKey.get(seriesKey);
+    if (!acc) continue;
     const points: SeriesPoint[] = [];
-    for (const [sessionId, value] of bestPerSession) {
+    for (const [sessionId, value] of acc.bestPerSession) {
       const session = sessionById.get(sessionId);
       if (!session) continue;
       points.push({
@@ -217,20 +319,30 @@ export async function getProgressDataPure(
     points.sort((a, b) => (a.date < b.date ? -1 : 1));
     if (points.length === 0) continue;
     series.push({
-      variantId: vid,
+      seriesKey,
+      variantId: bucket.variantId,
       liftFamilyId: family.id,
       liftFamilyName: family.name,
       variantName: variant.name,
+      plannedRepsMin: bucket.plannedRepsMin,
+      plannedRepsMax: bucket.plannedRepsMax,
       metric,
       points,
     });
   }
+  series.sort(
+    (a, b) =>
+      a.liftFamilyName.localeCompare(b.liftFamilyName) ||
+      a.variantName.localeCompare(b.variantName) ||
+      a.plannedRepsMin - b.plannedRepsMin ||
+      a.plannedRepsMax - b.plannedRepsMax,
+  );
 
   const dateMap = new Map<string, { date: string; [k: string]: number | string }>();
   for (const s of series) {
     for (const p of s.points) {
       const row = dateMap.get(p.date) ?? { date: p.date };
-      row[s.variantId] = p.value;
+      row[s.seriesKey] = p.value;
       dateMap.set(p.date, row);
     }
   }
@@ -245,13 +357,16 @@ export async function getProgressDataPure(
   };
 }
 
-export function useProgressData(variantIds: string[]): ProgressChartData | undefined {
+export function useProgressData(buckets: ProgressBucket[]): ProgressChartData | undefined {
   const settings = useUserSettings();
-  // Single-string key so deps array length doesn't vary with variantIds.
-  const key = variantIds.join(',');
+  // Stable string key so the deps array shape doesn't depend on buckets.length.
+  const key = buckets
+    .map((b) => makeSeriesKey(b.variantId, b.plannedRepsMin, b.plannedRepsMax))
+    .sort()
+    .join(',');
   return useLiveQuery(async () => {
     if (settings === undefined) return undefined;
-    return getProgressDataPure(variantIds, settings.units);
+    return getProgressDataPure(buckets, settings.units);
   }, [settings?.units, key]);
 }
 

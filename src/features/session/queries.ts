@@ -251,7 +251,7 @@ export async function getPlannedSlotView(slotId: string): Promise<PlannedSlotVie
 }
 
 export async function getActiveSession(): Promise<Session | null> {
-  const rows = await getDb().session.where('state').equals('ACTIVE').toArray();
+  const rows = await getDb().live.session.where('state').equals('ACTIVE').toArray();
   if (rows.length === 0) return null;
   return rows.reduce((acc, s) => (s.startedAt > acc.startedAt ? s : acc));
 }

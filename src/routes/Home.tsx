@@ -56,11 +56,18 @@ export function Home() {
         if (!cancelled && before === 'evicted') setEvicted(true);
         await initData();
       } catch (err: unknown) {
+        // initError surfaces in the chrome; also dump to console so dev
+        // tools have the full stack when a user reports the banner.
+        console.error('[Home] init failed', err);
         if (!cancelled) {
           setInitError(err instanceof Error ? err.message : 'Initialization failed');
         }
       }
-    })().catch(() => undefined);
+    })().catch((err) => {
+      // Should never fire (the inner try/catch already handles errors),
+      // but if the IIFE itself throws synchronously, log it.
+      console.error('[Home] init IIFE failed', err);
+    });
     return () => {
       cancelled = true;
     };

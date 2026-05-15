@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { _resetDbForTest, getDb } from '@/data/db';
 import { runSeed } from '@/data/seed';
 import { seedFakeHistory } from '@/data/fakeHistory';
+import { newId, nowIso } from '@/data/ids';
 import { setUserUnits } from '@/features/settings/actions';
 import {
   getAllChartableVariantsPure,
   getDefaultProgressVariantsPure,
   getProgressDataPure,
 } from '@/features/progress/queries';
+import type { Session, SessionLift, SessionSet } from '@/data/types';
 
 describe('progress queries (pure)', () => {
   beforeEach(() => {
@@ -73,6 +75,84 @@ describe('progress queries (pure)', () => {
     }
     expect(data.hasWeight).toBe(true);
     expect(data.hasReps).toBe(false);
+  });
+
+  it('one variant logged at two rep ranges produces two distinct series', async () => {
+    await runSeed();
+    await setUserUnits('lb');
+    const db = getDb();
+
+    // Find a free-weight variant we can attach logged sets to.
+    const variant = (await db.variant.toArray()).find((v) => v.equipmentKind === 'barbell');
+    expect(variant).toBeDefined();
+    const location = (await db.location.toArray())[0]!;
+
+    async function logRange(
+      dateIso: string,
+      min: number,
+      max: number,
+      weights: number[],
+    ): Promise<void> {
+      const session: Session = {
+        id: newId(),
+        locationId: location.id,
+        startedAt: dateIso,
+        completedAt: dateIso,
+        state: 'COMPLETED',
+        calendarDate: dateIso.slice(0, 10),
+      };
+      await db.session.put(session);
+      const lift: SessionLift = {
+        id: newId(),
+        sessionId: session.id,
+        liftFamilyId: variant!.liftFamilyId,
+        variantId: variant!.id,
+        orderIndex: 0,
+        scope: 'session-only',
+      };
+      await db.sessionLift.put(lift);
+      const sets: SessionSet[] = weights.map((w, idx) => ({
+        id: newId(),
+        sessionLiftId: lift.id,
+        variantId: variant!.id,
+        plannedRepsMin: min,
+        plannedRepsMax: max,
+        plannedReps: max,
+        orderIndex: idx,
+        loggedWeight: w,
+        loggedReps: max,
+        loggedAt: dateIso,
+      }));
+      await db.sessionSet.bulkPut(sets);
+    }
+
+    // Two 5×5 sessions and two 8-12 sessions on different dates.
+    await logRange('2026-04-01T10:00:00Z', 5, 5, [225, 230]);
+    await logRange('2026-04-08T10:00:00Z', 5, 5, [230, 235]);
+    await logRange('2026-04-03T10:00:00Z', 8, 12, [145, 150, 145]);
+    await logRange('2026-04-10T10:00:00Z', 8, 12, [150, 155, 150]);
+
+    const data = await getProgressDataPure([variant!.id], 'lb');
+    const forVariant = data.series.filter((s) => s.variantId === variant!.id);
+    expect(forVariant).toHaveLength(2);
+
+    const heavy = forVariant.find((s) => s.plannedRepsMin === 5 && s.plannedRepsMax === 5);
+    const hyper = forVariant.find((s) => s.plannedRepsMin === 8 && s.plannedRepsMax === 12);
+    expect(heavy).toBeDefined();
+    expect(hyper).toBeDefined();
+    expect(heavy!.seriesKey).not.toBe(hyper!.seriesKey);
+
+    // Top set per session within each range.
+    expect(heavy!.points.map((p) => p.value)).toEqual([230, 235]);
+    expect(hyper!.points.map((p) => p.value)).toEqual([150, 155]);
+
+    // Row map uses seriesKey, not variantId.
+    const r1 = data.rows.find((r) => r.date === '2026-04-01');
+    expect(r1?.[heavy!.seriesKey]).toBe(230);
+    expect(r1?.[hyper!.seriesKey]).toBeUndefined();
+    const r3 = data.rows.find((r) => r.date === '2026-04-03');
+    expect(r3?.[heavy!.seriesKey]).toBeUndefined();
+    expect(r3?.[hyper!.seriesKey]).toBe(150);
   });
 
   it('bodyweight variants produce reps-axis series, not weight ones', async () => {

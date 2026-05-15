@@ -36,6 +36,7 @@ import {
   YAxis,
 } from 'recharts';
 import type { ProgressChartData, ProgressSeries } from '@/features/progress/queries';
+import { repRangeLabel } from '@/features/progress/queries';
 import { getDb } from '@/data/db';
 import { sessionCalendarDate } from '@/features/session/queries';
 
@@ -128,8 +129,8 @@ export function ProgressChart({ data, height = 280 }: ProgressChartProps) {
     const date = s.activeLabel;
     const firstSeries = s.activePayload?.[0];
     if (!date || !firstSeries) return;
-    const variantId = String(firstSeries.dataKey);
-    const ser = data.series.find((x) => x.variantId === variantId);
+    const seriesKey = String(firstSeries.dataKey);
+    const ser = data.series.find((x) => x.seriesKey === seriesKey);
     if (!ser) return;
     openPoint(ser, date);
   };
@@ -178,7 +179,7 @@ export function ProgressChart({ data, height = 280 }: ProgressChartProps) {
             }}
             formatter={(value, _name, item) => {
               const key = String((item as { dataKey?: string }).dataKey ?? '');
-              const s = data.series.find((x) => x.variantId === key);
+              const s = data.series.find((x) => x.seriesKey === key);
               const unitLabel = s?.metric === 'reps' ? 'reps' : data.units;
               return [`${value as number} ${unitLabel}`, s ? legendName(s) : String(_name)];
             }}
@@ -187,7 +188,7 @@ export function ProgressChart({ data, height = 280 }: ProgressChartProps) {
           <Legend
             wrapperStyle={{ color: axisColor, fontSize: 12 }}
             formatter={(value: string) => {
-              const s = data.series.find((x) => x.variantId === value);
+              const s = data.series.find((x) => x.seriesKey === value);
               return s ? legendName(s) : value;
             }}
           />
@@ -195,10 +196,10 @@ export function ProgressChart({ data, height = 280 }: ProgressChartProps) {
             const color = SERIES_COLORS[idx % SERIES_COLORS.length] ?? SERIES_COLORS[0]!;
             return (
               <Line
-                key={s.variantId}
+                key={s.seriesKey}
                 type="monotone"
-                dataKey={s.variantId}
-                name={s.variantId}
+                dataKey={s.seriesKey}
+                name={s.seriesKey}
                 yAxisId={s.metric === 'reps' ? 'reps' : 'weight'}
                 stroke={color}
                 strokeWidth={2}
@@ -250,8 +251,9 @@ export function ProgressChart({ data, height = 280 }: ProgressChartProps) {
 }
 
 function legendName(s: ProgressSeries): string {
-  const base = `${s.liftFamilyName} (${s.variantName})`;
-  return s.metric === 'reps' ? `${base} (reps)` : base;
+  const range = repRangeLabel(s.plannedRepsMin, s.plannedRepsMax);
+  const base = `${s.liftFamilyName} (${s.variantName}) · ${range}`;
+  return s.metric === 'reps' ? `${base} reps` : base;
 }
 
 async function resolveSessionForPoint(variantId: string, date: string): Promise<string | null> {

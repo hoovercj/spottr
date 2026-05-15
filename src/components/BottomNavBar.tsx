@@ -99,7 +99,7 @@ export function BottomNavBar() {
           disableRipple
           icon={
             <img
-              src="./icon-nav.svg"
+              src={`${import.meta.env.BASE_URL}icon-nav.svg`}
               alt=""
               width={LOGO_SIZE}
               height={LOGO_SIZE}
