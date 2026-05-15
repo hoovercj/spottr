@@ -21,6 +21,7 @@ import {
 } from '@assistant-ui/react';
 import type { AIMessage } from '@/features/ai/providers/types';
 import type { UseChatSession } from '@/features/ai/chat/useChatSession';
+import { deriveSuggestions } from '@/features/ai/chat/suggestions';
 
 interface ViewMessageBase {
   id: string;
@@ -127,6 +128,10 @@ export function useChatRuntime(session: UseChatSession) {
   const viewMessages = useMemo(() => buildViewMessages(session.state.messages), [
     session.state.messages,
   ]);
+  const suggestions = useMemo(
+    () => deriveSuggestions(session.state.messages).map((prompt) => ({ prompt })),
+    [session.state.messages],
+  );
 
   const onNew = useCallback(
     async (message: AppendMessage): Promise<void> => {
@@ -151,6 +156,7 @@ export function useChatRuntime(session: UseChatSession) {
     messages: viewMessages,
     isRunning: session.state.isStreaming,
     convertMessage: convertViewMessage,
+    suggestions,
     onNew,
     onCancel,
   };

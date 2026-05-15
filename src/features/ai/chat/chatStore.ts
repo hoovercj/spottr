@@ -21,11 +21,37 @@ import { buildSystemPrompt } from '@/features/ai/prompts/systemPrompt';
 import { todayLocalDateString } from '@/data/calendarDate';
 import { newId } from '@/data/ids';
 import { getDb } from '@/data/db';
+import { getUserProfile } from '@/features/ai/settings/userProfile';
 import type { AIMessage, AIToolCall } from '@/features/ai/providers/types';
 
 const MAX_TOOL_LOOPS = 6;
+/**
+ * Hard cap on how many transcript messages we replay to the model per
+ * send. Long conversations are pruned to the most recent slice (the
+ * full history still lives in storage / UI). Keeps token cost bounded
+ * and latency from creeping up at chat #50.
+ */
+const MAX_HISTORY_MESSAGES = 12;
 const PERSIST_KEY = 'ai:conversation';
 const PERSIST_DEBOUNCE_MS = 300;
+
+async function fetchActiveProgramName(): Promise<string | null> {
+  const programs = await getDb().live.program.toArray();
+  return programs.find((p) => p.isActive)?.name ?? null;
+}
+
+/**
+ * Cap how much transcript we replay to the model. Keeps the system
+ * message intact and trims the oldest user/assistant/tool messages.
+ * Exported for tests; pure / no side effects.
+ */
+export function pruneHistory(
+  history: ReadonlyArray<AIMessage>,
+  maxKeep = MAX_HISTORY_MESSAGES,
+): AIMessage[] {
+  if (history.length <= maxKeep) return [...history];
+  return history.slice(-maxKeep);
+}
 
 interface State {
   messages: AIMessage[];
@@ -76,9 +102,20 @@ export const useChatStore = create<State & Actions>((set, get) => ({
       });
       return;
     }
+    // Refresh profile + active program every send so a Settings edit
+    // takes effect immediately on the next message (both reads are cheap
+     // and ride on Dexie's in-memory cache).
+    const [profile, activeProgramName] = await Promise.all([
+      getUserProfile(),
+      fetchActiveProgramName(),
+    ]);
     const system: AIMessage = {
       role: 'system',
-      content: buildSystemPrompt(todayLocalDateString()),
+      content: buildSystemPrompt({
+        todayLocal: todayLocalDateString(),
+        profile,
+        activeProgramName,
+      }),
     };
     const userMsg: AIMessage = {
       id: `user-${newId()}`,
@@ -92,7 +129,12 @@ export const useChatStore = create<State & Actions>((set, get) => ({
     set({ abortCtrl: ctrl });
 
     try {
-      let working: AIMessage[] = [system, ...baseTranscript];
+      // Cap how much history we replay per turn. The full transcript
+      // still lives in storage and the UI; we just don't ship every
+      // past turn to the model. Cycles started this turn (assistant
+      // turn, tool responses) are appended after pruning and always
+      // sent in full.
+      let working: AIMessage[] = [system, ...pruneHistory(baseTranscript)];
       for (let loop = 0; loop < MAX_TOOL_LOOPS; loop++) {
         const assistantId = `asst-${newId()}`;
         const placeholder: AIMessage = {

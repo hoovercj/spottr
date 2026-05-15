@@ -3,6 +3,7 @@ import { _resetDbForTest, getDb } from '@/data/db';
 import {
   _flushChatStorePersistForTest,
   _resetChatStoreForTest,
+  pruneHistory,
   useChatStore,
 } from '@/features/ai/chat/chatStore';
 import type { AIMessage } from '@/features/ai/providers/types';
@@ -97,5 +98,29 @@ describe('chatStore persistence', () => {
 
     await useChatStore.getState().hydrate();
     expect(useChatStore.getState().messages).toEqual(messages);
+  });
+});
+
+describe('pruneHistory', () => {
+  function msg(i: number, role: AIMessage['role'] = 'user'): AIMessage {
+    return { id: `m${i}`, role, content: `msg-${i}` };
+  }
+
+  it('returns the array as-is when at or below the cap', () => {
+    const all = Array.from({ length: 12 }, (_, i) => msg(i));
+    expect(pruneHistory(all)).toEqual(all);
+  });
+
+  it('keeps only the most-recent `cap` messages when over', () => {
+    const all = Array.from({ length: 30 }, (_, i) => msg(i));
+    const out = pruneHistory(all);
+    expect(out).toHaveLength(12);
+    expect(out[0]!.content).toBe('msg-18');
+    expect(out[out.length - 1]!.content).toBe('msg-29');
+  });
+
+  it('honors an explicit cap override', () => {
+    const all = Array.from({ length: 10 }, (_, i) => msg(i));
+    expect(pruneHistory(all, 4)).toEqual([msg(6), msg(7), msg(8), msg(9)]);
   });
 });

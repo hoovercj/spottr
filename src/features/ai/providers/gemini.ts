@@ -52,11 +52,24 @@ interface GeminiTool {
   functionDeclarations: GeminiFunctionDeclaration[];
 }
 
+interface GeminiGenerationConfig {
+  temperature?: number;
+}
+
 interface GeminiRequest {
   contents: GeminiContent[];
   systemInstruction?: { parts: GeminiTextPart[] };
   tools?: GeminiTool[];
+  generationConfig?: GeminiGenerationConfig;
 }
+
+/**
+ * Analysis-grade default: low enough that the coach doesn't take
+ * creative liberties with numbers, high enough to allow some natural
+ * sentence variation. Settable per-provider via GeminiProviderOptions
+ * so a future Settings slider can override.
+ */
+const DEFAULT_TEMPERATURE = 0.4;
 
 interface GeminiCandidate {
   content?: { role?: string; parts?: GeminiPart[] };
@@ -75,6 +88,8 @@ interface GeminiResponse {
 export interface GeminiProviderOptions {
   apiKey: string;
   model?: string;
+  /** Sampling temperature for the model. Defaults to `DEFAULT_TEMPERATURE`. */
+  temperature?: number;
 }
 
 export class GeminiProvider implements AIProvider {
@@ -82,16 +97,19 @@ export class GeminiProvider implements AIProvider {
   readonly defaultModel: string;
   readonly #apiKey: string;
   readonly #model: string;
+  readonly #temperature: number;
 
   constructor(opts: GeminiProviderOptions) {
     if (!opts.apiKey) throw new Error('GeminiProvider requires a non-empty apiKey');
     this.#apiKey = opts.apiKey;
     this.#model = opts.model ?? 'gemini-2.5-flash';
+    this.#temperature = opts.temperature ?? DEFAULT_TEMPERATURE;
     this.defaultModel = this.#model;
   }
 
   async send(req: AISendRequest): Promise<AISendResult> {
     const body = buildRequestBody(req.messages, req.tools);
+    body.generationConfig = { temperature: this.#temperature };
     if (req.onProgress) {
       return this.#sendStreaming(body, req.signal, req.onProgress);
     }

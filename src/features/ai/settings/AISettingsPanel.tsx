@@ -28,6 +28,7 @@ import {
   setProvider,
 } from '@/features/ai/settings/apiKeyStore';
 import { GeminiProvider } from '@/features/ai/providers/gemini';
+import { UserProfileForm } from '@/features/ai/settings/UserProfileForm';
 
 type Status =
   | { kind: 'idle' }
@@ -179,6 +180,8 @@ export function AISettingsPanel() {
           {status.message}
         </Alert>
       )}
+
+      <UserProfileForm />
     </Stack>
   );
 }

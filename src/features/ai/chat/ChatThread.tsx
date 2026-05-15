@@ -12,7 +12,7 @@ import {
   AssistantRuntimeProvider,
   ThreadPrimitive,
 } from '@assistant-ui/react';
-import { Alert, Box, Button, Fab, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Fab, Stack, Typography } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { useChatRuntime } from '@/features/ai/chat/useChatRuntime';
@@ -91,6 +91,8 @@ export function ChatThread({
               </Box>
             </ThreadPrimitive.Viewport>
 
+            <SuggestionChips />
+
             {session.state.error && (
               <Box sx={{ px: 2, py: 1 }}>
                 <Alert severity="warning" variant="outlined">
@@ -137,9 +139,12 @@ export function ChatThread({
 }
 
 function EmptyState() {
+  // Suggestion chips below the composer already surface the canonical
+  // questions on an empty thread — keep this hint slim so it doesn't
+  // duplicate them.
   return (
     <Stack
-      spacing={1.5}
+      spacing={1}
       sx={{
         px: 3,
         pt: 6,
@@ -152,9 +157,37 @@ function EmptyState() {
       <Typography variant="body1" color="text.primary">
         Ask anything about your training.
       </Typography>
-      <Typography variant="body2">Try:</Typography>
-      <Typography variant="body2">"How has my squat trended over the past 6 weeks?"</Typography>
-      <Typography variant="body2">"Am I making progress on bench at 5×5 vs 8-12?"</Typography>
+      <Typography variant="body2">Try one of the suggestions below, or type your own.</Typography>
     </Stack>
+  );
+}
+
+/**
+ * Renders the runtime-provided suggestion list as a row of tappable
+ * MUI chips. ThreadPrimitive.Suggestion sends the prompt as if the
+ * user had typed it.
+ */
+function SuggestionChips() {
+  return (
+    <Box
+      sx={{
+        px: 1.5,
+        py: 1,
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 0.75,
+        // Hide the row entirely when there are no suggestions to avoid
+        // a stray strip of whitespace above the composer.
+        '&:empty': { display: 'none' },
+      }}
+    >
+      <ThreadPrimitive.Suggestions>
+        {({ suggestion }) => (
+          <ThreadPrimitive.Suggestion prompt={suggestion.prompt} send asChild>
+            <Chip label={suggestion.prompt} clickable size="small" variant="outlined" />
+          </ThreadPrimitive.Suggestion>
+        )}
+      </ThreadPrimitive.Suggestions>
+    </Box>
   );
 }
