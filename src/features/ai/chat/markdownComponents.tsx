@@ -67,7 +67,7 @@ function LI({ children }: PropsWithChildren) {
 function A({
   href,
   children,
-}: PropsWithChildren<{ href?: string }>) {
+}: PropsWithChildren<{ href?: string | undefined }>) {
   return (
     <Link href={href} target="_blank" rel="noreferrer noopener">
       {children}

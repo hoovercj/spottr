@@ -19,6 +19,7 @@ import type {
   AISendRequest,
   AISendResult,
   AIToolCall,
+  AIUsage,
   ToolSpec,
 } from '@/features/ai/providers/types';
 import { toGeminiSchema, type GeminiParameterSchema } from '@/features/ai/providers/geminiSchema';
@@ -114,12 +115,13 @@ export class GeminiProvider implements AIProvider {
       return this.#sendStreaming(body, req.signal, req.onProgress);
     }
     const url = `${ENDPOINT_BASE}/${encodeURIComponent(this.#model)}:generateContent?key=${encodeURIComponent(this.#apiKey)}`;
-    const res = await fetch(url, {
+    const init: RequestInit = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal: req.signal,
-    });
+    };
+    if (req.signal) init.signal = req.signal;
+    const res = await fetch(url, init);
     const json = (await res.json()) as GeminiResponse;
     if (!res.ok || json.error) {
       const msg = json.error?.message ?? `Gemini HTTP ${res.status}`;
@@ -134,12 +136,13 @@ export class GeminiProvider implements AIProvider {
     onProgress: (partial: AIMessage) => void,
   ): Promise<AISendResult> {
     const url = `${ENDPOINT_BASE}/${encodeURIComponent(this.#model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(this.#apiKey)}`;
-    const res = await fetch(url, {
+    const init: RequestInit = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal,
-    });
+    };
+    if (signal) init.signal = signal;
+    const res = await fetch(url, init);
     if (!res.ok) {
       // Non-2xx on the streaming endpoint returns a single JSON error.
       const errJson = (await res.json().catch(() => null)) as GeminiResponse | null;
@@ -182,15 +185,17 @@ export class GeminiProvider implements AIProvider {
         }
       }
       if (parsed.usageMetadata) {
-        lastUsage = {
-          inputTokens: parsed.usageMetadata.promptTokenCount,
-          outputTokens: parsed.usageMetadata.candidatesTokenCount,
-        };
+        lastUsage = makeUsage(
+          parsed.usageMetadata.promptTokenCount,
+          parsed.usageMetadata.candidatesTokenCount,
+        );
       }
       onProgress(makePartial(text, toolCalls));
     }
 
-    return { messages: [makePartial(text, toolCalls)], usage: lastUsage };
+    const result: AISendResult = { messages: [makePartial(text, toolCalls)] };
+    if (lastUsage) result.usage = lastUsage;
+    return result;
   }
 }
 
@@ -353,6 +358,16 @@ function safeParseJson(s: string): unknown {
   }
 }
 
+function makeUsage(
+  inputTokens: number | undefined,
+  outputTokens: number | undefined,
+): AIUsage | undefined {
+  const usage: AIUsage = {};
+  if (typeof inputTokens === 'number') usage.inputTokens = inputTokens;
+  if (typeof outputTokens === 'number') usage.outputTokens = outputTokens;
+  return Object.keys(usage).length > 0 ? usage : undefined;
+}
+
 function decodeResponse(json: GeminiResponse): AISendResult {
   const candidate = json.candidates?.[0];
   const parts = candidate?.content?.parts ?? [];
@@ -370,11 +385,11 @@ function decodeResponse(json: GeminiResponse): AISendResult {
   }
   const assistant: AIMessage = { role: 'assistant', content: text };
   if (toolCalls.length > 0) assistant.toolCalls = toolCalls;
-  return {
-    messages: [assistant],
-    usage: {
-      inputTokens: json.usageMetadata?.promptTokenCount,
-      outputTokens: json.usageMetadata?.candidatesTokenCount,
-    },
-  };
+  const result: AISendResult = { messages: [assistant] };
+  const usage = makeUsage(
+    json.usageMetadata?.promptTokenCount,
+    json.usageMetadata?.candidatesTokenCount,
+  );
+  if (usage) result.usage = usage;
+  return result;
 }
